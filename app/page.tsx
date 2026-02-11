@@ -14,6 +14,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { safeFetch } from "@/lib/safe-fetch"
 import type { RedisKey, RedisStats } from "@/lib/redis-mock-data"
 import { ChevronDown, ChevronUp } from "lucide-react"
@@ -369,22 +370,24 @@ export default function RedisUI() {
             </ResizablePanel>
             <ResizableHandle className="bg-transparent w-1 hover:bg-muted/50 transition-colors" />
             <ResizablePanel defaultSize={75}>
-              <div className="h-full overflow-y-auto p-4">
-                <div className="mx-auto max-w-6xl space-y-6">
-                  {/* Data Explorer */}
-                  <section className="space-y-4">
-                    <h2 className="text-lg font-semibold tracking-tight">Data Explorer</h2>
-                    <div className="h-[600px] overflow-hidden rounded-xl border bg-card shadow-sm">
-                      <KeyViewer
-                        keyData={selectedKey}
-                        onUpdateKey={handleUpdateKey}
-                        onDeleteKey={handleDeleteKey}
-                        onUpdateTTL={handleUpdateTTL}
-                      />
-                    </div>
-                  </section>
+              <ScrollArea className="h-full">
+                <div className="h-full p-4">
+                  <div className="mx-auto max-w-6xl space-y-6">
+                    {/* Data Explorer */}
+                    <section className="space-y-4">
+                      <h2 className="text-lg font-semibold tracking-tight">Data Explorer</h2>
+                      <div className="h-[600px] overflow-hidden rounded-xl border bg-card shadow-sm">
+                        <KeyViewer
+                          keyData={selectedKey}
+                          onUpdateKey={handleUpdateKey}
+                          onDeleteKey={handleDeleteKey}
+                          onUpdateTTL={handleUpdateTTL}
+                        />
+                      </div>
+                    </section>
+                  </div>
                 </div>
-              </div>
+              </ScrollArea>
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
