@@ -353,7 +353,7 @@ export default function RedisUI() {
 
         {/* Resizable Content Area */}
         <div className="flex-1 overflow-hidden">
-          <ResizablePanelGroup direction="horizontal" className="h-full rounded-lg border">
+          <ResizablePanelGroup direction="horizontal" className="h-full">
             <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
               <div className="h-full p-2">
                 <KeyList
@@ -367,7 +367,7 @@ export default function RedisUI() {
                 />
               </div>
             </ResizablePanel>
-            <ResizableHandle withHandle />
+            <ResizableHandle className="bg-transparent w-1 hover:bg-muted/50 transition-colors" />
             <ResizablePanel defaultSize={75}>
               <div className="h-full overflow-y-auto p-4">
                 <div className="mx-auto max-w-6xl space-y-6">
