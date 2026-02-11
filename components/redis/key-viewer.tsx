@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -20,6 +21,7 @@ import {
 import {
   type RedisKey,
   typeColors,
+  defaultTypeColor,
   formatTTL,
   formatBytes,
 } from "@/lib/redis-mock-data"
@@ -33,6 +35,7 @@ import {
   Plus,
   Key,
 } from "lucide-react"
+import { JsonViewer } from "@/components/redis/json-viewer"
 
 interface KeyViewerProps {
   keyData: RedisKey | null
@@ -45,6 +48,7 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState("")
   const [newTTL, setNewTTL] = useState("")
+  const [rawWrap, setRawWrap] = useState(true)
 
   if (!keyData) {
     return (
@@ -57,7 +61,47 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
     )
   }
 
-  const colors = typeColors[keyData.type]
+  // Helper to recursively parse JSON strings
+  const tryParseAndClean = (value: any): { parsed: any; isJson: boolean } => {
+    if (typeof value !== "string") return { parsed: value, isJson: false }
+
+    // Clean common prefixes (Java serialization, etc)
+    let cleaned = value
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        cleaned = JSON.parse(value)
+      } catch {
+        // Keep original if parse fails
+      }
+    } else {
+      // Look for JSON start if not already a quoted string
+      const jsonStartIndex = value.search(/[{[]/)
+      if (jsonStartIndex > 0) {
+        cleaned = value.substring(jsonStartIndex)
+      }
+    }
+
+    // Try parsing as JSON
+    try {
+      const parsed = JSON.parse(cleaned)
+      // If it parsed into a string, recurse (handle double encoding)
+      if (typeof parsed === "string") {
+        return tryParseAndClean(parsed)
+      }
+      // If it parsed into an object/array, it's valid JSON
+      if (typeof parsed === "object" && parsed !== null) {
+        return { parsed, isJson: true }
+      }
+      return { parsed: cleaned, isJson: false }
+    } catch {
+      return { parsed: cleaned, isJson: false }
+    }
+  }
+
+  const colors = typeColors[keyData.type] || defaultTypeColor
+
+  // Parse value for display (both raw and formatted)
+  const { parsed: parsedValue, isJson } = tryParseAndClean(keyData.value)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(
@@ -99,9 +143,15 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                 className="min-h-[200px] font-mono text-sm"
               />
             ) : (
-              <pre className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 font-mono text-sm">
-                {keyData.value as string}
-              </pre>
+              <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm overflow-x-auto">
+                {isJson ? (
+                  <JsonViewer data={parsedValue} />
+                ) : (
+                  <pre className="whitespace-pre-wrap break-all">
+                    {typeof keyData.value === 'string' ? keyData.value : JSON.stringify(keyData.value, null, 2)}
+                  </pre>
+                )}
+              </div>
             )}
           </div>
         )
@@ -304,7 +354,7 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                 value="raw"
                 className="h-10 rounded-none border-b-2 border-transparent px-0 pb-3 pt-2 data-[state=active]:border-primary data-[state=active]:shadow-none"
               >
-                Raw JSON
+                Raw Text
               </TabsTrigger>
             </TabsList>
           </div>
@@ -325,6 +375,20 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                 <p className="mt-1 text-sm text-muted-foreground">
                   {formatTTL(keyData.ttl)}
                 </p>
+                {keyData.ttl !== null && (
+                  <p className="mt-4 text-xs text-muted-foreground border-t pt-2">
+                    Expires at: <span className="font-medium text-foreground">
+                      {(() => {
+                        const date = new Date(Date.now() + keyData.ttl * 1000)
+                        const day = date.getDate().toString().padStart(2, '0')
+                        const month = date.toLocaleString('en-GB', { month: 'short' })
+                        const year = date.getFullYear()
+                        const time = date.toLocaleTimeString('en-GB', { hour12: false })
+                        return `${day}-${month}-${year} ${time}`
+                      })()}
+                    </span>
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ttl">Set new TTL (seconds)</Label>
@@ -369,15 +433,45 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="raw" className="mt-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full">
-              <pre className="p-4 font-mono text-sm">
-                {JSON.stringify(keyData.value, null, 2)}
-              </pre>
-            </ScrollArea>
+          <TabsContent value="raw" className="mt-0 flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="flex items-center justify-end px-4 py-2 border-b shrink-0">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="wrap-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                  Wrap Text
+                </Label>
+                <Button
+                  id="wrap-toggle"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-6 w-10 p-0 rounded-full border-2 transition-colors",
+                    rawWrap ? "border-primary bg-primary" : "border-muted bg-transparent"
+                  )}
+                  onClick={() => setRawWrap(!rawWrap)}
+                >
+                  <span className={cn(
+                    "block h-4 w-4 rounded-full bg-background shadow-sm transition-transform",
+                    rawWrap ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden min-h-0">
+              <ScrollArea key={rawWrap ? "wrap" : "scroll"} className="h-full">
+                <pre
+                  className={cn(
+                    "p-4 font-mono text-sm min-w-full pb-10",
+                    rawWrap ? "whitespace-pre-wrap break-all w-0" : "whitespace-pre"
+                  )}
+                >
+                  {typeof keyData.value === 'string' ? keyData.value : JSON.stringify(keyData.value, null, 2)}
+                </pre>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
-      </CardContent>
-    </Card>
+      </CardContent >
+    </Card >
   )
 }

@@ -191,6 +191,8 @@ export const typeColors: Record<RedisDataType, { bg: string; text: string }> = {
   stream: { bg: "bg-cyan-100 dark:bg-cyan-900/40", text: "text-cyan-700 dark:text-cyan-300" },
 }
 
+export const defaultTypeColor = { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300" }
+
 export function formatTTL(ttl: number | null): string {
   if (ttl === null || ttl === -1) return "No expiry"
   if (ttl < 60) return `${ttl}s`

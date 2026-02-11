@@ -17,6 +17,7 @@ import {
   type RedisKey,
   type RedisDataType,
   typeColors,
+  defaultTypeColor,
   formatTTL,
   formatBytes,
 } from "@/lib/redis-mock-data"
@@ -118,7 +119,7 @@ export function KeyList({
         <ScrollArea className="h-full">
           <div className="space-y-1 p-3 pt-0">
             {filteredKeys.map((item) => {
-              const colors = typeColors[item.type]
+              const colors = typeColors[item.type] || defaultTypeColor
               const isSelected = selectedKey?.key === item.key
               return (
                 <div
@@ -133,14 +134,16 @@ export function KeyList({
                     }
                   }}
                   className={`group flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${isSelected
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-transparent hover:bg-muted/50"
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-transparent hover:bg-muted/50"
                     }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
-                      {item.key}
-                    </span>
+                    <div className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap scrollbar-none hover:scrollbar-thin hover:scrollbar-thumb-muted-foreground/20">
+                      <span className="font-mono text-sm font-medium">
+                        {item.key}
+                      </span>
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"

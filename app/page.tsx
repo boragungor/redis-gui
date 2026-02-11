@@ -8,8 +8,15 @@ import { KeyViewer } from "@/components/redis/key-viewer"
 import { AddKeyDialog } from "@/components/redis/add-key-dialog"
 import { CLITerminal } from "@/components/redis/cli-terminal"
 import { ConnectionScreen, type ConnectionConfig } from "@/components/redis/connection-screen"
+import { Button } from "@/components/ui/button"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { safeFetch } from "@/lib/safe-fetch"
 import type { RedisKey, RedisStats } from "@/lib/redis-mock-data"
+import { ChevronDown, ChevronUp } from "lucide-react"
 
 function buildApiConfig(conn: ConnectionConfig) {
   return {
@@ -45,6 +52,7 @@ export default function RedisUI() {
   const [stats, setStats] = useState<RedisStats>(defaultStats)
   const [isLoadingKeys, setIsLoadingKeys] = useState(false)
   const [isLoadingStats, setIsLoadingStats] = useState(false)
+  const [showStats, setShowStats] = useState(true)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("redis-ui-theme") as "light" | "dark" | null
@@ -73,7 +81,7 @@ export default function RedisUI() {
       const maxIterations = 20 // Safety limit
 
       do {
-        const data = await safeFetch("/api/redis/keys", {
+        const data = await safeFetch<{ keys: RedisKey[]; cursor: string }>("/api/redis/keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, cursor, count: 500 }),
@@ -107,7 +115,7 @@ export default function RedisUI() {
     setIsLoadingStats(true)
     try {
       const config = buildApiConfig(conn)
-      const data = await safeFetch("/api/redis/info", {
+      const data = await safeFetch<{ stats: RedisStats }>("/api/redis/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config }),
@@ -139,7 +147,7 @@ export default function RedisUI() {
 
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch("/api/redis/get", {
+        const data = await safeFetch<{ data: RedisKey }>("/api/redis/get", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key: keyStub.key }),
@@ -228,7 +236,7 @@ export default function RedisUI() {
       if (!connection) return
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch("/api/redis/ttl", {
+        const data = await safeFetch<{ ttl: number }>("/api/redis/ttl", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key, action, ttl }),
@@ -274,7 +282,7 @@ export default function RedisUI() {
       if (!connection) return "(error) Not connected"
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch("/api/redis/command", {
+        const data = await safeFetch<{ result: string }>("/api/redis/command", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, command }),
@@ -323,38 +331,71 @@ export default function RedisUI() {
         }}
       />
       <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6">
-        <div className="mb-4 lg:mb-6">
-          <StatsCards stats={stats} isLoading={isLoadingStats} />
-        </div>
-        <div className="flex flex-1 gap-4 overflow-hidden lg:gap-6">
-          <div className="w-full max-w-sm shrink-0 overflow-hidden">
-            <KeyList
-              keys={keys}
-              selectedKey={selectedKey}
-              onSelectKey={handleSelectKey}
-              onAddKey={() => setShowAddDialog(true)}
-              onDeleteKey={handleDeleteKey}
-              onRefresh={handleRefresh}
-              isLoading={isLoadingKeys}
-            />
-          </div>
-          <div className="flex flex-1 gap-4 overflow-hidden lg:gap-6">
-            <div className="flex-1 overflow-hidden">
-              <KeyViewer
-                keyData={selectedKey}
-                onUpdateKey={handleUpdateKey}
-                onDeleteKey={handleDeleteKey}
-                onUpdateTTL={handleUpdateTTL}
-              />
-            </div>
-            {showCLI && (
-              <div className="hidden w-96 shrink-0 overflow-hidden lg:block">
-                <CLITerminal onCommand={handleCLICommand} />
-              </div>
+        {/* System Status - Top Level */}
+        <section className="mb-4 flex-shrink-0">
+          <div
+            className="mb-4 flex cursor-pointer items-center gap-2"
+            onClick={() => setShowStats(!showStats)}
+          >
+            <h2 className="text-lg font-semibold tracking-tight">System Status</h2>
+            {showStats ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
+          {showStats && (
+            <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+              <StatsCards stats={stats} isLoading={isLoadingStats} />
+            </div>
+          )}
+        </section>
+
+        {/* Resizable Content Area */}
+        <div className="flex-1 overflow-hidden">
+          <ResizablePanelGroup direction="horizontal" className="h-full rounded-lg border">
+            <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
+              <div className="h-full p-2">
+                <KeyList
+                  keys={keys}
+                  selectedKey={selectedKey}
+                  onSelectKey={handleSelectKey}
+                  onAddKey={() => setShowAddDialog(true)}
+                  onDeleteKey={handleDeleteKey}
+                  onRefresh={() => connection && fetchKeys(connection)}
+                  isLoading={isLoadingKeys}
+                />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={75}>
+              <div className="h-full overflow-y-auto p-4">
+                <div className="mx-auto max-w-6xl space-y-6">
+                  {/* Data Explorer */}
+                  <section className="space-y-4">
+                    <h2 className="text-lg font-semibold tracking-tight">Data Explorer</h2>
+                    <div className="h-[600px] overflow-hidden rounded-xl border bg-card shadow-sm">
+                      <KeyViewer
+                        keyData={selectedKey}
+                        onUpdateKey={handleUpdateKey}
+                        onDeleteKey={handleDeleteKey}
+                        onUpdateTTL={handleUpdateTTL}
+                      />
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
+
+        {showCLI && (
+          <div className="hidden w-96 shrink-0 overflow-hidden lg:block border-l bg-muted/10">
+            <CLITerminal onCommand={handleCLICommand} />
+          </div>
+        )}
       </main>
+
       <AddKeyDialog
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
