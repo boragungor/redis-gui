@@ -463,7 +463,7 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-6 w-10 p-0 rounded-full border-2 transition-colors",
+                    "h-6 w-10 p-0.5 justify-start rounded-full border-2 transition-colors",
                     rawWrap ? "border-primary bg-primary" : "border-muted bg-transparent"
                   )}
                   onClick={() => setRawWrap(!rawWrap)}
