@@ -49,6 +49,9 @@ export default function RedisUI() {
   const [isLoadingKeys, setIsLoadingKeys] = useState(false)
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [showStats, setShowStats] = useState(true)
+  const [isAutoRefresh, setIsAutoRefresh] = useState(false)
+
+
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("redis-ui-theme") as "light" | "dark" | null
@@ -307,6 +310,18 @@ export default function RedisUI() {
     }
   }, [connection, fetchKeys, fetchStats])
 
+  // Auto-refresh timer
+  useEffect(() => {
+    if (!isAutoRefresh || !connection) return
+
+    const interval = setInterval(() => {
+      fetchKeys(connection)
+      fetchStats(connection)
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [isAutoRefresh, connection, fetchKeys, fetchStats])
+
   if (!connection) {
     return <ConnectionScreen onConnect={setConnection} />
   }
@@ -324,6 +339,7 @@ export default function RedisUI() {
           setKeys([])
           setSelectedKey(null)
           setStats(defaultStats)
+          setIsAutoRefresh(false)
         }}
       />
       <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6 gap-4">
@@ -363,6 +379,8 @@ export default function RedisUI() {
                   onDeleteKey={handleDeleteKey}
                   onRefresh={() => connection && fetchKeys(connection)}
                   isLoading={isLoadingKeys}
+                  isAutoRefresh={isAutoRefresh}
+                  onToggleAutoRefresh={setIsAutoRefresh}
                 />
               </div>
 

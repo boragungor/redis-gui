@@ -30,6 +30,9 @@ import {
   Trash2,
 } from "lucide-react"
 
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+
 interface KeyListProps {
   keys: RedisKey[]
   selectedKey: RedisKey | null
@@ -38,6 +41,10 @@ interface KeyListProps {
   onDeleteKey: (key: string) => void
   onRefresh?: () => void
   isLoading?: boolean
+  isAutoRefresh?: boolean
+  onToggleAutoRefresh?: (enabled: boolean) => void
+  refreshInterval?: number
+  onRefreshIntervalChange?: (interval: number) => void
 }
 
 export function KeyList({
@@ -48,6 +55,10 @@ export function KeyList({
   onDeleteKey,
   onRefresh,
   isLoading,
+  isAutoRefresh = false,
+  onToggleAutoRefresh,
+  refreshInterval = 5,
+  onRefreshIntervalChange,
 }: KeyListProps) {
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -69,7 +80,29 @@ export function KeyList({
               {filteredKeys.length}
             </Badge>
           </CardTitle>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-2">
+              <Switch
+                id="auto-refresh"
+                checked={isAutoRefresh}
+                onCheckedChange={onToggleAutoRefresh}
+              />
+              {isAutoRefresh && (
+                <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-200">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={refreshInterval}
+                    onChange={(e) => onRefreshIntervalChange?.(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="h-6 w-12 px-1 py-0 text-center text-xs"
+                  />
+                  <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground whitespace-nowrap">s</Label>
+                </div>
+              )}
+              {!isAutoRefresh && (
+                <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground whitespace-nowrap hidden xl:inline-block">Auto</Label>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="icon"
