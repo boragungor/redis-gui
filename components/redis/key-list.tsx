@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -117,7 +117,7 @@ export function KeyList({
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
         <ScrollArea className="h-full">
-          <div className="space-y-1 p-3 pt-0">
+          <div className="space-y-1 p-3 pt-0 min-w-max">
             {filteredKeys.map((item) => {
               const colors = typeColors[item.type] || defaultTypeColor
               const isSelected = selectedKey?.key === item.key
@@ -133,17 +133,15 @@ export function KeyList({
                       onSelectKey(item)
                     }
                   }}
-                  className={`group flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${isSelected
+                  className={`group flex w-full min-w-fit cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${isSelected
                     ? "border-primary/50 bg-primary/5"
                     : "border-transparent hover:bg-muted/50"
                     }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap scrollbar-none hover:scrollbar-thin hover:scrollbar-thumb-muted-foreground/20">
-                      <span className="font-mono text-sm font-medium">
-                        {item.key}
-                      </span>
-                    </div>
+                    <span className="font-mono text-sm font-medium whitespace-nowrap">
+                      {item.key}
+                    </span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -163,11 +161,11 @@ export function KeyList({
                     >
                       {item.type}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {formatBytes(item.size)}
                     </span>
                     {item.ttl !== null && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                         <Clock className="h-3 w-3" />
                         {formatTTL(item.ttl)}
                       </span>
@@ -182,6 +180,7 @@ export function KeyList({
               </div>
             )}
           </div>
+          <ScrollBar orientation="horizontal" />
         </ScrollArea>
       </CardContent>
     </Card>

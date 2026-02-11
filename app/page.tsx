@@ -9,11 +9,6 @@ import { AddKeyDialog } from "@/components/redis/add-key-dialog"
 import { CLITerminal } from "@/components/redis/cli-terminal"
 import { ConnectionScreen, type ConnectionConfig } from "@/components/redis/connection-screen"
 import { Button } from "@/components/ui/button"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { safeFetch } from "@/lib/safe-fetch"
 import type { RedisKey, RedisStats } from "@/lib/redis-mock-data"
@@ -331,9 +326,9 @@ export default function RedisUI() {
           setStats(defaultStats)
         }}
       />
-      <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6">
+      <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6 gap-4">
         {/* System Status - Top Level */}
-        <section className="mb-4 flex-shrink-0">
+        <section className="flex-shrink-0">
           <div
             className="mb-4 flex cursor-pointer items-center gap-2"
             onClick={() => setShowStats(!showStats)}
@@ -352,11 +347,14 @@ export default function RedisUI() {
           )}
         </section>
 
-        {/* Resizable Content Area */}
-        <div className="flex-1 overflow-hidden">
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
-              <div className="h-full p-2">
+        {/* Main Content Area - 3 Columns */}
+        <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
+          {/* Data Explorer Section (Keys + Viewer) */}
+          <section className="flex flex-1 flex-col min-w-0 space-y-4">
+            <h2 className="text-lg font-semibold tracking-tight flex-shrink-0">Data Explorer</h2>
+            <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
+              {/* Column 1: Key List */}
+              <div className="w-96 flex-shrink-0 flex flex-col">
                 <KeyList
                   keys={keys}
                   selectedKey={selectedKey}
@@ -367,36 +365,36 @@ export default function RedisUI() {
                   isLoading={isLoadingKeys}
                 />
               </div>
-            </ResizablePanel>
-            <ResizableHandle className="bg-transparent w-1 hover:bg-muted/50 transition-colors" />
-            <ResizablePanel defaultSize={75}>
-              <ScrollArea className="h-full">
-                <div className="h-full p-4">
-                  <div className="mx-auto max-w-6xl space-y-6">
-                    {/* Data Explorer */}
-                    <section className="space-y-4">
-                      <h2 className="text-lg font-semibold tracking-tight">Data Explorer</h2>
-                      <div className="h-[600px] overflow-hidden rounded-xl border bg-card shadow-sm">
-                        <KeyViewer
-                          keyData={selectedKey}
-                          onUpdateKey={handleUpdateKey}
-                          onDeleteKey={handleDeleteKey}
-                          onUpdateTTL={handleUpdateTTL}
-                        />
-                      </div>
-                    </section>
-                  </div>
-                </div>
-              </ScrollArea>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
 
-        {showCLI && (
-          <div className="hidden w-96 shrink-0 overflow-hidden lg:block border-l bg-muted/10">
-            <CLITerminal onCommand={handleCLICommand} />
-          </div>
-        )}
+              {/* Column 2: Data Viewer */}
+              <div className="flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
+                <KeyViewer
+                  keyData={selectedKey}
+                  onUpdateKey={handleUpdateKey}
+                  onDeleteKey={handleDeleteKey}
+                  onUpdateTTL={handleUpdateTTL}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Column 3: CLI Terminal */}
+          {showCLI && (
+            <div className="w-96 flex-shrink-0 flex flex-col border-l pl-6 pt-[44px]">
+              <div className="flex flex-col h-full space-y-4">
+                <div className="flex items-center justify-between flex-shrink-0 h-[28px]"> {/* Align with Data Explorer header roughly? No, title is in section above. */}
+                  <h2 className="text-lg font-semibold tracking-tight">CLI</h2>
+                  <Button variant="ghost" size="icon" onClick={() => setShowCLI(false)}>
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <CLITerminal onCommand={handleCLICommand} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
 
       <AddKeyDialog
