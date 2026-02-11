@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -167,7 +167,7 @@ export function KeyList({
                     {item.ttl !== null && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                         <Clock className="h-3 w-3" />
-                        {formatTTL(item.ttl)}
+                        <TTLCountdown ttl={item.ttl} />
                       </span>
                     )}
                   </div>
@@ -185,4 +185,27 @@ export function KeyList({
       </CardContent>
     </Card>
   )
+}
+
+function TTLCountdown({ ttl }: { ttl: number }) {
+  const [currentTTL, setCurrentTTL] = useState<number>(ttl)
+
+  useEffect(() => {
+    setCurrentTTL(ttl)
+  }, [ttl])
+
+  useEffect(() => {
+    if (currentTTL <= 0) return
+
+    const interval = setInterval(() => {
+      setCurrentTTL((prev) => {
+        if (prev <= 0) return 0
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [currentTTL])
+
+  return <>{formatTTL(currentTTL)}</>
 }
