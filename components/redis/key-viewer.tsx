@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -49,6 +49,25 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
   const [editValue, setEditValue] = useState("")
   const [newTTL, setNewTTL] = useState("")
   const [rawWrap, setRawWrap] = useState(true)
+
+  const [currentTTL, setCurrentTTL] = useState<number | null>(null)
+
+  useEffect(() => {
+    setCurrentTTL(keyData?.ttl ?? null)
+  }, [keyData])
+
+  useEffect(() => {
+    if (currentTTL === null || currentTTL <= 0) return
+
+    const interval = setInterval(() => {
+      setCurrentTTL((prev) => {
+        if (prev === null || prev <= 0) return 0
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [currentTTL])
 
   if (!keyData) {
     return (
@@ -300,7 +319,7 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
               </span>
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
-                {formatTTL(keyData.ttl)}
+                {formatTTL(currentTTL)}
               </span>
             </div>
           </div>
@@ -370,16 +389,16 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                   Current TTL
                 </p>
                 <p className="text-2xl font-semibold tabular-nums">
-                  {keyData.ttl === null ? "No expiry" : `${keyData.ttl}s`}
+                  {currentTTL === null ? "No expiry" : `${currentTTL}s`}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatTTL(keyData.ttl)}
+                  {formatTTL(currentTTL)}
                 </p>
-                {keyData.ttl !== null && (
+                {currentTTL !== null && (
                   <p className="mt-4 text-xs text-muted-foreground border-t pt-2">
                     Expires at: <span className="font-medium text-foreground">
                       {(() => {
-                        const date = new Date(Date.now() + keyData.ttl * 1000)
+                        const date = new Date(Date.now() + currentTTL * 1000)
                         const day = date.getDate().toString().padStart(2, '0')
                         const month = date.toLocaleString('en-GB', { month: 'short' })
                         const year = date.getFullYear()

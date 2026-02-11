@@ -197,7 +197,7 @@ export function formatTTL(ttl: number | null): string {
   if (ttl === null || ttl === -1) return "No expiry"
   if (ttl < 60) return `${ttl}s`
   if (ttl < 3600) return `${Math.floor(ttl / 60)}m ${ttl % 60}s`
-  if (ttl < 86400) return `${Math.floor(ttl / 3600)}h ${Math.floor((ttl % 3600) / 60)}m`
+  if (ttl < 86400) return `${Math.floor(ttl / 3600)}h ${Math.floor((ttl % 3600) / 60)}m ${ttl % 60}s`
   return `${Math.floor(ttl / 86400)}d ${Math.floor((ttl % 86400) / 3600)}h`
 }
 
