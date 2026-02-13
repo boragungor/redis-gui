@@ -59,6 +59,16 @@ export default function RedisUI() {
     const initialTheme = savedTheme || (prefersDark ? "dark" : "light")
     setTheme(initialTheme)
     document.documentElement.classList.toggle("dark", initialTheme === "dark")
+
+    // Restore connection
+    const savedConnection = localStorage.getItem("redis-ui-connection")
+    if (savedConnection) {
+      try {
+        setConnection(JSON.parse(savedConnection))
+      } catch (e) {
+        console.error("Failed to parse saved connection", e)
+      }
+    }
   }, [])
 
   const toggleTheme = () => {
@@ -322,8 +332,13 @@ export default function RedisUI() {
     return () => clearInterval(interval)
   }, [isAutoRefresh, connection, fetchKeys, fetchStats])
 
+  const handleConnect = (conn: ConnectionConfig) => {
+    setConnection(conn)
+    localStorage.setItem("redis-ui-connection", JSON.stringify(conn))
+  }
+
   if (!connection) {
-    return <ConnectionScreen onConnect={setConnection} />
+    return <ConnectionScreen onConnect={handleConnect} />
   }
 
   return (
@@ -335,6 +350,7 @@ export default function RedisUI() {
         showCLI={showCLI}
         connection={connection}
         onDisconnect={() => {
+          localStorage.removeItem("redis-ui-connection")
           setConnection(null)
           setKeys([])
           setSelectedKey(null)
