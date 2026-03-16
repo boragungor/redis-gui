@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Database,
   Settings,
@@ -24,17 +24,18 @@ import {
   Shield,
   ShieldOff,
   User,
-} from "lucide-react"
-import { useAuth } from "@/lib/auth-context"
-import { isAzureAdConfigured } from "@/lib/auth-config"
-import type { ConnectionConfig } from "@/components/redis/connection-screen"
+} from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { isAzureAdConfigured } from "@/lib/auth-config";
+import { SessionCountdown } from "@/components/auth/session-countdown";
+import type { ConnectionConfig } from "@/components/redis/connection-screen";
 
 interface HeaderProps {
-  theme: "light" | "dark"
-  onToggleTheme: () => void
-  onToggleCLI: () => void
-  showCLI: boolean
-  connection?: ConnectionConfig
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+  onToggleCLI: () => void;
+  showCLI: boolean;
+  connection?: ConnectionConfig;
 }
 
 export function Header({
@@ -44,24 +45,24 @@ export function Header({
   showCLI,
   connection,
 }: HeaderProps) {
-  const { user, logout, isAuthenticated } = useAuth()
+  const { user, logout, isAuthenticated } = useAuth();
 
   const handleLogout = async () => {
     try {
-      await logout()
+      await logout();
     } catch (error) {
-      console.error("Logout failed:", error)
+      console.error("Logout failed:", error);
     }
-  }
+  };
 
   const getUserInitials = () => {
-    if (!user?.name) return "U"
-    const names = user.name.split(" ")
+    if (!user?.name) return "U";
+    const names = user.name.split(" ");
     if (names.length >= 2) {
-      return `${names[0][0]}${names[1][0]}`.toUpperCase()
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
     }
-    return user.name.substring(0, 2).toUpperCase()
-  }
+    return user.name.substring(0, 2).toUpperCase();
+  };
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border/50 bg-card px-4 lg:px-6">
@@ -93,6 +94,10 @@ export function Header({
             )}
           </div>
         )}
+
+        {/* Session Countdown (Azure AD) */}
+        {isAzureAdConfigured() && isAuthenticated && <SessionCountdown />}
+
         <Button
           variant={showCLI ? "secondary" : "ghost"}
           size="icon"
@@ -116,14 +121,18 @@ export function Header({
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={undefined} alt={user.name || "User"} />
-                  <AvatarFallback className="text-xs">{getUserInitials()}</AvatarFallback>
+                  <AvatarFallback className="text-xs">
+                    {getUserInitials()}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.name || "User"}</p>
+                  <p className="text-sm font-medium leading-none">
+                    {user.name || "User"}
+                  </p>
                   <p className="text-xs leading-none text-muted-foreground">
                     {user.username || user.localAccountId}
                   </p>
@@ -139,7 +148,10 @@ export function Header({
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-destructive focus:text-destructive"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>
@@ -171,5 +183,5 @@ export function Header({
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }
