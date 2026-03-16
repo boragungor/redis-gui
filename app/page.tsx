@@ -1,18 +1,34 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "@/lib/auth-context"
+import { useAuthenticatedFetch } from "@/hooks/use-auth-fetch"
+import { isAzureAdConfigured } from "@/lib/auth-config"
+import { LoginPage } from "@/components/auth/login-page"
 import { Header } from "@/components/redis/header"
 import { StatsCards } from "@/components/redis/stats-cards"
 import { KeyList } from "@/components/redis/key-list"
 import { KeyViewer } from "@/components/redis/key-viewer"
 import { AddKeyDialog } from "@/components/redis/add-key-dialog"
 import { CLITerminal } from "@/components/redis/cli-terminal"
-import { ConnectionScreen, type ConnectionConfig } from "@/components/redis/connection-screen"
+import type { ConnectionConfig } from "@/components/redis/connection-screen"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { safeFetch } from "@/lib/safe-fetch"
 import type { RedisKey, RedisStats } from "@/lib/redis-mock-data"
 import { ChevronDown, ChevronUp } from "lucide-react"
+
+// Get default Redis connection from environment variables
+function getDefaultConnection(): ConnectionConfig {
+  return {
+    host: process.env.NEXT_PUBLIC_REDIS_HOST || "localhost",
+    port: process.env.NEXT_PUBLIC_REDIS_PORT || "6379",
+    database: process.env.NEXT_PUBLIC_REDIS_DATABASE || "0",
+    useAuth: false,
+    username: "",
+    password: "",
+    useTLS: false,
+  }
+}
 
 function buildApiConfig(conn: ConnectionConfig) {
   return {
@@ -39,6 +55,10 @@ const defaultStats: RedisStats = {
 }
 
 export default function RedisUI() {
+  const { isAuthenticated, getAccessToken } = useAuth()
+  const { authFetch } = useAuthenticatedFetch()
+  const requiresAuth = isAzureAdConfigured()
+  
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [connection, setConnection] = useState<ConnectionConfig | null>(null)
   const [keys, setKeys] = useState<RedisKey[]>([])
@@ -50,7 +70,7 @@ export default function RedisUI() {
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [showStats, setShowStats] = useState(true)
   const [isAutoRefresh, setIsAutoRefresh] = useState(false)
-
+  const [refreshInterval, setRefreshInterval] = useState(10)
 
 
   useEffect(() => {
@@ -60,14 +80,23 @@ export default function RedisUI() {
     setTheme(initialTheme)
     document.documentElement.classList.toggle("dark", initialTheme === "dark")
 
-    // Restore connection
+    // Initialize connection (use saved or default)
     const savedConnection = localStorage.getItem("redis-ui-connection")
     if (savedConnection) {
       try {
         setConnection(JSON.parse(savedConnection))
       } catch (e) {
         console.error("Failed to parse saved connection", e)
+        // Use default on error
+        const defaultConn = getDefaultConnection()
+        setConnection(defaultConn)
+        localStorage.setItem("redis-ui-connection", JSON.stringify(defaultConn))
       }
+    } else {
+      // No saved connection, use default from environment
+      const defaultConn = getDefaultConnection()
+      setConnection(defaultConn)
+      localStorage.setItem("redis-ui-connection", JSON.stringify(defaultConn))
     }
   }, [])
 
@@ -80,9 +109,11 @@ export default function RedisUI() {
 
   // Fetch keys from Redis
   const fetchKeys = useCallback(async (conn: ConnectionConfig) => {
+    console.log("fetchKeys called with connection:", conn)
     setIsLoadingKeys(true)
     try {
       const config = buildApiConfig(conn)
+      console.log("API config:", config)
       // Scan in a loop to get all keys (up to a reasonable limit)
       let allKeys: RedisKey[] = []
       let cursor = "0"
@@ -90,17 +121,26 @@ export default function RedisUI() {
       const maxIterations = 20 // Safety limit
 
       do {
-        const data = await safeFetch<{ keys: RedisKey[]; cursor: string }>("/api/redis/keys", {
+        // Use authenticated fetch (includes Azure AD token like acpanel)
+        const response = await authFetch("/api/redis/keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, cursor, count: 500 }),
         })
-        if (!data.success) break
+        
+        const data = await response.json()
+        console.log("Keys API response:", data)
+        if (!data.success) {
+          console.error("Keys fetch failed:", data)
+          break
+        }
 
         allKeys = [...allKeys, ...data.keys]
         cursor = data.cursor
         iterations++
       } while (cursor !== "0" && iterations < maxIterations)
+
+      console.log("Total keys fetched:", allKeys.length)
 
       // Dedupe by key name (scan can return duplicates)
       const seen = new Set<string>()
@@ -111,24 +151,29 @@ export default function RedisUI() {
       })
 
       deduped.sort((a, b) => a.key.localeCompare(b.key))
+      console.log("Final deduped keys:", deduped.length)
       setKeys(deduped)
-    } catch {
+    } catch (error) {
+      console.error("fetchKeys error:", error)
       // Connection error - keys stay empty
     } finally {
       setIsLoadingKeys(false)
     }
-  }, [])
+  }, [authFetch])
 
   // Fetch stats from Redis
   const fetchStats = useCallback(async (conn: ConnectionConfig) => {
     setIsLoadingStats(true)
     try {
       const config = buildApiConfig(conn)
-      const data = await safeFetch<{ stats: RedisStats }>("/api/redis/info", {
+      // Use authenticated fetch (includes Azure AD token like acpanel)
+      const response = await authFetch("/api/redis/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config }),
       })
+      
+      const data = await response.json()
       if (data.success) {
         setStats(data.stats)
       }
@@ -137,15 +182,22 @@ export default function RedisUI() {
     } finally {
       setIsLoadingStats(false)
     }
-  }, [])
+  }, [authFetch])
 
   // Load data when connection is established
   useEffect(() => {
-    if (connection) {
+    console.log("Connection changed, current connection:", connection)
+    console.log("Is authenticated:", isAuthenticated, "Requires auth:", requiresAuth)
+    
+    // Only fetch data if:
+    // 1. Connection exists AND
+    // 2. Either auth is not required OR user is authenticated
+    if (connection && (!requiresAuth || isAuthenticated)) {
+      console.log("Calling fetchKeys and fetchStats")
       fetchKeys(connection)
       fetchStats(connection)
     }
-  }, [connection, fetchKeys, fetchStats])
+  }, [connection, fetchKeys, fetchStats, isAuthenticated, requiresAuth])
 
   // Select a key and fetch its full value
   const handleSelectKey = useCallback(
@@ -156,11 +208,12 @@ export default function RedisUI() {
 
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch<{ data: RedisKey }>("/api/redis/get", {
+        const response = await authFetch("/api/redis/get", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key: keyStub.key }),
         })
+        const data = await response.json()
         if (data.success) {
           const fullKey: RedisKey = {
             key: data.data.key,
@@ -179,7 +232,7 @@ export default function RedisUI() {
         // Keep stub data
       }
     },
-    [connection]
+    [connection, authFetch]
   )
 
   // Add a new key
@@ -188,7 +241,7 @@ export default function RedisUI() {
       if (!connection) return
       try {
         const config = buildApiConfig(connection)
-        await safeFetch("/api/redis/set", {
+        await authFetch("/api/redis/set", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -208,7 +261,7 @@ export default function RedisUI() {
         // Error adding key
       }
     },
-    [connection, fetchKeys, fetchStats, handleSelectKey]
+    [connection, fetchKeys, fetchStats, handleSelectKey, authFetch]
   )
 
   // Update a key's value
@@ -217,7 +270,7 @@ export default function RedisUI() {
       if (!connection) return
       try {
         const config = buildApiConfig(connection)
-        await safeFetch("/api/redis/set", {
+        await authFetch("/api/redis/set", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -236,7 +289,7 @@ export default function RedisUI() {
         // Error updating
       }
     },
-    [connection]
+    [connection, authFetch]
   )
 
   // Update TTL
@@ -245,11 +298,12 @@ export default function RedisUI() {
       if (!connection) return
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch<{ ttl: number }>("/api/redis/ttl", {
+        const response = await authFetch("/api/redis/ttl", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key, action, ttl }),
         })
+        const data = await response.json()
         if (data.success) {
           const newTTL = data.ttl
           setSelectedKey((prev) => (prev && prev.key === key ? { ...prev, ttl: newTTL } : prev))
@@ -259,7 +313,7 @@ export default function RedisUI() {
         // Error updating TTL
       }
     },
-    [connection]
+    [connection, authFetch]
   )
 
   // Delete a key
@@ -268,7 +322,7 @@ export default function RedisUI() {
       if (!connection) return
       try {
         const config = buildApiConfig(connection)
-        await safeFetch("/api/redis/delete", {
+        await authFetch("/api/redis/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, keys: [keyName] }),
@@ -282,7 +336,7 @@ export default function RedisUI() {
         // Error deleting
       }
     },
-    [connection, selectedKey, fetchStats]
+    [connection, selectedKey, fetchStats, authFetch]
   )
 
   // CLI command execution
@@ -291,11 +345,12 @@ export default function RedisUI() {
       if (!connection) return "(error) Not connected"
       try {
         const config = buildApiConfig(connection)
-        const data = await safeFetch<{ result: string }>("/api/redis/command", {
+        const response = await authFetch("/api/redis/command", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, command }),
         })
+        const data = await response.json()
 
         // After certain commands, refresh keys and stats
         const cmd = command.trim().split(/\s+/)[0]?.toUpperCase()
@@ -309,7 +364,7 @@ export default function RedisUI() {
         return `(error) ${err instanceof Error ? err.message : "Command failed"}`
       }
     },
-    [connection, fetchKeys, fetchStats]
+    [connection, fetchKeys, fetchStats, authFetch]
   )
 
   // Refresh all data
@@ -327,18 +382,19 @@ export default function RedisUI() {
     const interval = setInterval(() => {
       fetchKeys(connection)
       fetchStats(connection)
-    }, 5000)
+    }, refreshInterval * 1000)
 
     return () => clearInterval(interval)
-  }, [isAutoRefresh, connection, fetchKeys, fetchStats])
+  }, [isAutoRefresh, connection, fetchKeys, fetchStats, refreshInterval])
 
-  const handleConnect = (conn: ConnectionConfig) => {
-    setConnection(conn)
-    localStorage.setItem("redis-ui-connection", JSON.stringify(conn))
+  // Show login page if authentication is required and user is not authenticated
+  if (requiresAuth && !isAuthenticated) {
+    return <LoginPage />
   }
 
+  // Connection is auto-initialized from environment variables
   if (!connection) {
-    return <ConnectionScreen onConnect={handleConnect} />
+    return <div className="flex h-screen items-center justify-center">Loading...</div>
   }
 
   return (
@@ -349,14 +405,6 @@ export default function RedisUI() {
         onToggleCLI={() => setShowCLI(!showCLI)}
         showCLI={showCLI}
         connection={connection}
-        onDisconnect={() => {
-          localStorage.removeItem("redis-ui-connection")
-          setConnection(null)
-          setKeys([])
-          setSelectedKey(null)
-          setStats(defaultStats)
-          setIsAutoRefresh(false)
-        }}
       />
       <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6 gap-4">
         {/* System Status - Top Level */}
@@ -397,6 +445,8 @@ export default function RedisUI() {
                   isLoading={isLoadingKeys}
                   isAutoRefresh={isAutoRefresh}
                   onToggleAutoRefresh={setIsAutoRefresh}
+                  refreshInterval={refreshInterval}
+                  onRefreshIntervalChange={(interval) => setRefreshInterval(Math.max(10, interval))}
                 />
               </div>
 

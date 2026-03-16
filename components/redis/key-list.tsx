@@ -57,7 +57,7 @@ export function KeyList({
   isLoading,
   isAutoRefresh = false,
   onToggleAutoRefresh,
-  refreshInterval = 5,
+  refreshInterval = 10,
   onRefreshIntervalChange,
 }: KeyListProps) {
   const [search, setSearch] = useState("")
@@ -91,9 +91,9 @@ export function KeyList({
                 <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-200">
                   <Input
                     type="number"
-                    min={1}
+                    min={10}
                     value={refreshInterval}
-                    onChange={(e) => onRefreshIntervalChange?.(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => onRefreshIntervalChange?.(Math.max(10, parseInt(e.target.value) || 10))}
                     className="h-6 w-12 px-1 py-0 text-center text-xs"
                   />
                   <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground whitespace-nowrap">s</Label>

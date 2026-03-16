@@ -2,10 +2,12 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -21,7 +23,10 @@ import {
   LogOut,
   Shield,
   ShieldOff,
+  User,
 } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { isAzureAdConfigured } from "@/lib/auth-config"
 import type { ConnectionConfig } from "@/components/redis/connection-screen"
 
 interface HeaderProps {
@@ -30,7 +35,6 @@ interface HeaderProps {
   onToggleCLI: () => void
   showCLI: boolean
   connection?: ConnectionConfig
-  onDisconnect?: () => void
 }
 
 export function Header({
@@ -39,8 +43,26 @@ export function Header({
   onToggleCLI,
   showCLI,
   connection,
-  onDisconnect,
 }: HeaderProps) {
+  const { user, logout, isAuthenticated } = useAuth()
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
+  }
+
+  const getUserInitials = () => {
+    if (!user?.name) return "U"
+    const names = user.name.split(" ")
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase()
+    }
+    return user.name.substring(0, 2).toUpperCase()
+  }
+
   return (
     <header className="flex h-14 items-center justify-between border-b border-border/50 bg-card px-4 lg:px-6">
       <div className="flex items-center gap-3">
@@ -86,6 +108,45 @@ export function Header({
             <Moon className="h-4 w-4" />
           )}
         </Button>
+
+        {/* User Profile Menu */}
+        {isAzureAdConfigured() && isAuthenticated && user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={undefined} alt={user.name || "User"} />
+                  <AvatarFallback className="text-xs">{getUserInitials()}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user.name || "User"}</p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {user.username || user.localAccountId}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">
@@ -106,18 +167,6 @@ export function Header({
               <Info className="mr-2 h-4 w-4" />
               About
             </DropdownMenuItem>
-            {onDisconnect && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={onDisconnect}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Disconnect
-                </DropdownMenuItem>
-              </>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
