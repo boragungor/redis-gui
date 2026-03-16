@@ -59,10 +59,6 @@ NEXT_PUBLIC_AZURE_AD_TENANT_ID=your-tenant-id-here
 NEXT_PUBLIC_AZURE_AD_CLIENT_ID=your-client-id-here
 NEXT_PUBLIC_AZURE_AD_REDIRECT_URI=http://localhost:3000
 
-# Optional: Partner tenant for multi-tenant support
-NEXT_PUBLIC_AZURE_AD_PARTNER_TENANT_ID=partner-tenant-id
-NEXT_PUBLIC_AZURE_AD_PARTNER_CLIENT_ID=partner-client-id
-
 # Scopes (space-separated)
 NEXT_PUBLIC_AZURE_AD_SCOPES=User.Read openid profile email
 
@@ -213,26 +209,6 @@ export default function ProtectedPage() {
   
   return <div>Protected content</div>
 }
-```
-
-## 🌐 Multi-Tenant Support
-
-The app supports multiple Azure AD tenants (e.g., main organization + partners):
-
-```typescript
-// Login with main tenant
-const { login } = useAuth()
-await login()
-
-// Login with partner tenant
-const { loginPartner } = useAuth()
-await loginPartner()
-```
-
-Configure partner tenant in `.env.local`:
-```env
-NEXT_PUBLIC_AZURE_AD_PARTNER_TENANT_ID=partner-tenant-id
-NEXT_PUBLIC_AZURE_AD_PARTNER_CLIENT_ID=partner-client-id
 ```
 
 ## 🔧 Configuration Options

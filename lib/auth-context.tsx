@@ -14,7 +14,6 @@ interface AuthContextType {
   isAuthenticated: boolean
   user: AccountInfo | null
   login: () => Promise<void>
-  loginPartner: () => Promise<void>
   logout: () => Promise<void>
   getAccessToken: () => Promise<string | null>
   isLoading: boolean
@@ -70,24 +69,6 @@ export function AuthProvider({ children, useMsal: shouldUseMsal = true }: { chil
     }
   }
 
-  const loginPartner = async () => {
-    if (!shouldUseMsal || !instance) {
-      console.warn("Azure AD not configured")
-      return
-    }
-    setIsLoading(true)
-    try {
-      // Mark as partner login
-      localStorage.setItem("azure-partner", "true")
-      // Use redirect instead of popup (same window login like acpanel)
-      await instance.loginRedirect(loginRequest)
-    } catch (error) {
-      console.error("Partner login failed:", error)
-      setIsLoading(false)
-      throw error
-    }
-  }
-
   const logout = async () => {
     if (!shouldUseMsal || !instance) {
       console.warn("Azure AD not configured")
@@ -95,8 +76,6 @@ export function AuthProvider({ children, useMsal: shouldUseMsal = true }: { chil
     }
     setIsLoading(true)
     try {
-      // Clear partner flag
-      localStorage.removeItem("azure-partner")
       // Clear Redis connection
       localStorage.removeItem("redis-ui-connection")
       
@@ -141,7 +120,6 @@ export function AuthProvider({ children, useMsal: shouldUseMsal = true }: { chil
         isAuthenticated: shouldUseMsal ? msalAuthenticated : isAuthenticated,
         user,
         login,
-        loginPartner,
         logout,
         getAccessToken,
         isLoading,

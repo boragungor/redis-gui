@@ -43,21 +43,6 @@ export const msalConfig: Configuration = {
   },
 }
 
-// Partner tenant configuration (for multi-tenant scenarios)
-export const partnerMsalConfig: Configuration = {
-  auth: {
-    clientId: process.env.NEXT_PUBLIC_AZURE_AD_PARTNER_CLIENT_ID || "",
-    authority: `https://login.microsoftonline.com/${process.env.NEXT_PUBLIC_AZURE_AD_PARTNER_TENANT_ID}`,
-    redirectUri: process.env.NEXT_PUBLIC_AZURE_AD_REDIRECT_URI || "http://localhost:3000",
-    postLogoutRedirectUri: process.env.NEXT_PUBLIC_AZURE_AD_REDIRECT_URI || "http://localhost:3000",
-    navigateToLoginRequestUrl: false,
-  },
-  cache: {
-    cacheLocation: "localStorage",
-    storeAuthStateInCookie: false,
-  },
-}
-
 // Scopes for authentication requests
 export const loginRequest: PopupRequest = {
   scopes: (process.env.NEXT_PUBLIC_AZURE_AD_SCOPES || "User.Read openid profile email").split(" "),

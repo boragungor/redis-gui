@@ -20,7 +20,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onSuccess }: LoginPageProps) {
-  const { login, loginPartner, isLoading } = useAuth()
+  const { login, isLoading } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [showLocalLogin, setShowLocalLogin] = useState(false)
   const [localUsername, setLocalUsername] = useState("")
@@ -34,16 +34,6 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
       onSuccess?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Azure AD login failed")
-    }
-  }
-
-  const handlePartnerLogin = async () => {
-    setError(null)
-    try {
-      await loginPartner()
-      onSuccess?.()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Partner login failed")
     }
   }
 
@@ -110,27 +100,6 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                 <>
                   <LogIn className="mr-2 h-4 w-4" />
                   Sign in with Azure AD
-                </>
-              )}
-            </Button>
-
-            {/* Partner Login Option */}
-            <Button
-              onClick={handlePartnerLogin}
-              disabled={isLoading}
-              className="w-full"
-              size="lg"
-              variant="outline"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign in as Partner
                 </>
               )}
             </Button>
