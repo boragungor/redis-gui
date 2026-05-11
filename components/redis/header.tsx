@@ -26,7 +26,7 @@ import {
   User,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { isAzureAdConfigured } from "@/lib/auth-config";
+import { isAuthenticationRequired } from "@/lib/auth-config";
 import { SessionCountdown } from "@/components/auth/session-countdown";
 import type { ConnectionConfig } from "@/components/redis/connection-screen";
 
@@ -95,8 +95,8 @@ export function Header({
           </div>
         )}
 
-        {/* Session Countdown (Azure AD) */}
-        {isAzureAdConfigured() && isAuthenticated && <SessionCountdown />}
+        {/* Session Countdown (Any Auth) */}
+        {isAuthenticationRequired() && isAuthenticated && <SessionCountdown />}
 
         <Button
           variant={showCLI ? "secondary" : "ghost"}
@@ -115,7 +115,7 @@ export function Header({
         </Button>
 
         {/* User Profile Menu */}
-        {isAzureAdConfigured() && isAuthenticated && user && (
+        {isAuthenticationRequired() && isAuthenticated && user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">

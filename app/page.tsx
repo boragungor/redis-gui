@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { useAuthenticatedFetch } from "@/hooks/use-auth-fetch"
-import { isAzureAdConfigured } from "@/lib/auth-config"
-import { LoginPage } from "@/components/auth/login-page"
-import { Header } from "@/components/redis/header"
-import { StatsCards } from "@/components/redis/stats-cards"
-import { KeyList } from "@/components/redis/key-list"
-import { KeyViewer } from "@/components/redis/key-viewer"
-import { AddKeyDialog } from "@/components/redis/add-key-dialog"
-import { CLITerminal } from "@/components/redis/cli-terminal"
-import type { ConnectionConfig } from "@/components/redis/connection-screen"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import type { RedisKey, RedisStats } from "@/lib/redis-mock-data"
-import { ChevronDown, ChevronUp } from "lucide-react"
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { useAuthenticatedFetch } from "@/hooks/use-auth-fetch";
+import { isAuthenticationRequired } from "@/lib/auth-config";
+import { LoginPage } from "@/components/auth/login-page";
+import { Header } from "@/components/redis/header";
+import { StatsCards } from "@/components/redis/stats-cards";
+import { KeyList } from "@/components/redis/key-list";
+import { KeyViewer } from "@/components/redis/key-viewer";
+import { AddKeyDialog } from "@/components/redis/add-key-dialog";
+import { CLITerminal } from "@/components/redis/cli-terminal";
+import type { ConnectionConfig } from "@/components/redis/connection-screen";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { RedisKey, RedisStats } from "@/lib/redis-mock-data";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 // Get default Redis connection from environment variables
 function getDefaultConnection(): ConnectionConfig {
@@ -27,7 +27,7 @@ function getDefaultConnection(): ConnectionConfig {
     username: "",
     password: "",
     useTLS: false,
-  }
+  };
 }
 
 function buildApiConfig(conn: ConnectionConfig) {
@@ -39,7 +39,7 @@ function buildApiConfig(conn: ConnectionConfig) {
     username: conn.username,
     password: conn.password,
     useTLS: conn.useTLS,
-  }
+  };
 }
 
 const defaultStats: RedisStats = {
@@ -52,168 +52,186 @@ const defaultStats: RedisStats = {
   hitRate: 0,
   opsPerSec: 0,
   uptimeDays: 0,
-}
+};
 
 export default function RedisUI() {
-  const { isAuthenticated, getAccessToken } = useAuth()
-  const { authFetch } = useAuthenticatedFetch()
-  const requiresAuth = isAzureAdConfigured()
-  
-  const [theme, setTheme] = useState<"light" | "dark">("light")
-  const [connection, setConnection] = useState<ConnectionConfig | null>(null)
-  const [keys, setKeys] = useState<RedisKey[]>([])
-  const [selectedKey, setSelectedKey] = useState<RedisKey | null>(null)
-  const [showAddDialog, setShowAddDialog] = useState(false)
-  const [showCLI, setShowCLI] = useState(false)
-  const [stats, setStats] = useState<RedisStats>(defaultStats)
-  const [isLoadingKeys, setIsLoadingKeys] = useState(false)
-  const [isLoadingStats, setIsLoadingStats] = useState(false)
-  const [showStats, setShowStats] = useState(true)
-  const [isAutoRefresh, setIsAutoRefresh] = useState(false)
-  const [refreshInterval, setRefreshInterval] = useState(10)
+  const { isAuthenticated, getAccessToken } = useAuth();
+  const { authFetch } = useAuthenticatedFetch();
+  const requiresAuth = isAuthenticationRequired();
 
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [connection, setConnection] = useState<ConnectionConfig | null>(null);
+  const [keys, setKeys] = useState<RedisKey[]>([]);
+  const [selectedKey, setSelectedKey] = useState<RedisKey | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showCLI, setShowCLI] = useState(false);
+  const [stats, setStats] = useState<RedisStats>(defaultStats);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [showStats, setShowStats] = useState(true);
+  const [isAutoRefresh, setIsAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(10);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("redis-ui-theme") as "light" | "dark" | null
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    const initialTheme = savedTheme || (prefersDark ? "dark" : "light")
-    setTheme(initialTheme)
-    document.documentElement.classList.toggle("dark", initialTheme === "dark")
+    const savedTheme = localStorage.getItem("redis-ui-theme") as
+      | "light"
+      | "dark"
+      | null;
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)",
+    ).matches;
+    const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+    setTheme(initialTheme);
+    document.documentElement.classList.toggle("dark", initialTheme === "dark");
 
     // Initialize connection (use saved or default)
-    const savedConnection = localStorage.getItem("redis-ui-connection")
+    const savedConnection = localStorage.getItem("redis-ui-connection");
     if (savedConnection) {
       try {
-        setConnection(JSON.parse(savedConnection))
+        setConnection(JSON.parse(savedConnection));
       } catch (e) {
-        console.error("Failed to parse saved connection", e)
+        console.error("Failed to parse saved connection", e);
         // Use default on error
-        const defaultConn = getDefaultConnection()
-        setConnection(defaultConn)
-        localStorage.setItem("redis-ui-connection", JSON.stringify(defaultConn))
+        const defaultConn = getDefaultConnection();
+        setConnection(defaultConn);
+        localStorage.setItem(
+          "redis-ui-connection",
+          JSON.stringify(defaultConn),
+        );
       }
     } else {
       // No saved connection, use default from environment
-      const defaultConn = getDefaultConnection()
-      setConnection(defaultConn)
-      localStorage.setItem("redis-ui-connection", JSON.stringify(defaultConn))
+      const defaultConn = getDefaultConnection();
+      setConnection(defaultConn);
+      localStorage.setItem("redis-ui-connection", JSON.stringify(defaultConn));
     }
-  }, [])
+  }, []);
 
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light"
-    setTheme(newTheme)
-    localStorage.setItem("redis-ui-theme", newTheme)
-    document.documentElement.classList.toggle("dark", newTheme === "dark")
-  }
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    localStorage.setItem("redis-ui-theme", newTheme);
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
+  };
 
   // Fetch keys from Redis
-  const fetchKeys = useCallback(async (conn: ConnectionConfig) => {
-    console.log("fetchKeys called with connection:", conn)
-    setIsLoadingKeys(true)
-    try {
-      const config = buildApiConfig(conn)
-      console.log("API config:", config)
-      // Scan in a loop to get all keys (up to a reasonable limit)
-      let allKeys: RedisKey[] = []
-      let cursor = "0"
-      let iterations = 0
-      const maxIterations = 20 // Safety limit
+  const fetchKeys = useCallback(
+    async (conn: ConnectionConfig) => {
+      console.log("fetchKeys called with connection:", conn);
+      setIsLoadingKeys(true);
+      try {
+        const config = buildApiConfig(conn);
+        console.log("API config:", config);
+        // Scan in a loop to get all keys (up to a reasonable limit)
+        let allKeys: RedisKey[] = [];
+        let cursor = "0";
+        let iterations = 0;
+        const maxIterations = 20; // Safety limit
 
-      do {
-        // Use authenticated fetch (includes Azure AD token like acpanel)
-        const response = await authFetch("/api/redis/keys", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config, cursor, count: 500 }),
-        })
-        
-        const data = await response.json()
-        console.log("Keys API response:", data)
-        if (!data.success) {
-          console.error("Keys fetch failed:", data)
-          break
-        }
+        do {
+          // Use authenticated fetch (includes Azure AD token like acpanel)
+          const response = await authFetch("/api/redis/keys", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config, cursor, count: 500 }),
+          });
 
-        allKeys = [...allKeys, ...data.keys]
-        cursor = data.cursor
-        iterations++
-      } while (cursor !== "0" && iterations < maxIterations)
+          const data = await response.json();
+          console.log("Keys API response:", data);
+          if (!data.success) {
+            console.error("Keys fetch failed:", data);
+            break;
+          }
 
-      console.log("Total keys fetched:", allKeys.length)
+          allKeys = [...allKeys, ...data.keys];
+          cursor = data.cursor;
+          iterations++;
+        } while (cursor !== "0" && iterations < maxIterations);
 
-      // Dedupe by key name (scan can return duplicates)
-      const seen = new Set<string>()
-      const deduped = allKeys.filter((k) => {
-        if (seen.has(k.key)) return false
-        seen.add(k.key)
-        return true
-      })
+        console.log("Total keys fetched:", allKeys.length);
 
-      deduped.sort((a, b) => a.key.localeCompare(b.key))
-      console.log("Final deduped keys:", deduped.length)
-      setKeys(deduped)
-    } catch (error) {
-      console.error("fetchKeys error:", error)
-      // Connection error - keys stay empty
-    } finally {
-      setIsLoadingKeys(false)
-    }
-  }, [authFetch])
+        // Dedupe by key name (scan can return duplicates)
+        const seen = new Set<string>();
+        const deduped = allKeys.filter((k) => {
+          if (seen.has(k.key)) return false;
+          seen.add(k.key);
+          return true;
+        });
+
+        deduped.sort((a, b) => a.key.localeCompare(b.key));
+        console.log("Final deduped keys:", deduped.length);
+        setKeys(deduped);
+      } catch (error) {
+        console.error("fetchKeys error:", error);
+        // Connection error - keys stay empty
+      } finally {
+        setIsLoadingKeys(false);
+      }
+    },
+    [authFetch],
+  );
 
   // Fetch stats from Redis
-  const fetchStats = useCallback(async (conn: ConnectionConfig) => {
-    setIsLoadingStats(true)
-    try {
-      const config = buildApiConfig(conn)
-      // Use authenticated fetch (includes Azure AD token like acpanel)
-      const response = await authFetch("/api/redis/info", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config }),
-      })
-      
-      const data = await response.json()
-      if (data.success) {
-        setStats(data.stats)
+  const fetchStats = useCallback(
+    async (conn: ConnectionConfig) => {
+      setIsLoadingStats(true);
+      try {
+        const config = buildApiConfig(conn);
+        // Use authenticated fetch (includes Azure AD token like acpanel)
+        const response = await authFetch("/api/redis/info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config }),
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.stats);
+        }
+      } catch {
+        // Stats stay default
+      } finally {
+        setIsLoadingStats(false);
       }
-    } catch {
-      // Stats stay default
-    } finally {
-      setIsLoadingStats(false)
-    }
-  }, [authFetch])
+    },
+    [authFetch],
+  );
 
   // Load data when connection is established
   useEffect(() => {
-    console.log("Connection changed, current connection:", connection)
-    console.log("Is authenticated:", isAuthenticated, "Requires auth:", requiresAuth)
-    
+    console.log("Connection changed, current connection:", connection);
+    console.log(
+      "Is authenticated:",
+      isAuthenticated,
+      "Requires auth:",
+      requiresAuth,
+    );
+
     // Only fetch data if:
     // 1. Connection exists AND
     // 2. Either auth is not required OR user is authenticated
     if (connection && (!requiresAuth || isAuthenticated)) {
-      console.log("Calling fetchKeys and fetchStats")
-      fetchKeys(connection)
-      fetchStats(connection)
+      console.log("Calling fetchKeys and fetchStats");
+      fetchKeys(connection);
+      fetchStats(connection);
     }
-  }, [connection, fetchKeys, fetchStats, isAuthenticated, requiresAuth])
+  }, [connection, fetchKeys, fetchStats, isAuthenticated, requiresAuth]);
 
   // Select a key and fetch its full value
   const handleSelectKey = useCallback(
     async (keyStub: RedisKey) => {
-      if (!connection) return
+      if (!connection) return;
       // Show the key immediately with stub data, then fetch full value
-      setSelectedKey({ ...keyStub, value: keyStub.value ?? "Loading..." })
+      setSelectedKey({ ...keyStub, value: keyStub.value ?? "Loading..." });
 
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         const response = await authFetch("/api/redis/get", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key: keyStub.key }),
-        })
-        const data = await response.json()
+        });
+        const data = await response.json();
         if (data.success) {
           const fullKey: RedisKey = {
             key: data.data.key,
@@ -221,26 +239,35 @@ export default function RedisUI() {
             ttl: data.data.ttl,
             size: data.data.size,
             value: data.data.value,
-          }
-          setSelectedKey(fullKey)
+          };
+          setSelectedKey(fullKey);
           // Also update the key in the list with latest metadata
           setKeys((prev) =>
-            prev.map((k) => (k.key === fullKey.key ? { ...k, ttl: fullKey.ttl, size: fullKey.size, type: fullKey.type as RedisKey["type"] } : k))
-          )
+            prev.map((k) =>
+              k.key === fullKey.key
+                ? {
+                    ...k,
+                    ttl: fullKey.ttl,
+                    size: fullKey.size,
+                    type: fullKey.type as RedisKey["type"],
+                  }
+                : k,
+            ),
+          );
         }
       } catch {
         // Keep stub data
       }
     },
-    [connection, authFetch]
-  )
+    [connection, authFetch],
+  );
 
   // Add a new key
   const handleAddKey = useCallback(
     async (newKey: RedisKey) => {
-      if (!connection) return
+      if (!connection) return;
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         await authFetch("/api/redis/set", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -251,25 +278,25 @@ export default function RedisUI() {
             value: newKey.value,
             ttl: newKey.ttl,
           }),
-        })
+        });
         // Refresh keys and stats
-        await fetchKeys(connection)
-        await fetchStats(connection)
+        await fetchKeys(connection);
+        await fetchStats(connection);
         // Select the new key
-        handleSelectKey(newKey)
+        handleSelectKey(newKey);
       } catch {
         // Error adding key
       }
     },
-    [connection, fetchKeys, fetchStats, handleSelectKey, authFetch]
-  )
+    [connection, fetchKeys, fetchStats, handleSelectKey, authFetch],
+  );
 
   // Update a key's value
   const handleUpdateKey = useCallback(
     async (updatedKey: RedisKey) => {
-      if (!connection) return
+      if (!connection) return;
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         await authFetch("/api/redis/set", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -280,121 +307,168 @@ export default function RedisUI() {
             value: updatedKey.value,
             ttl: updatedKey.ttl,
           }),
-        })
-        setSelectedKey(updatedKey)
+        });
+        setSelectedKey(updatedKey);
         setKeys((prev) =>
-          prev.map((k) => (k.key === updatedKey.key ? updatedKey : k))
-        )
+          prev.map((k) => (k.key === updatedKey.key ? updatedKey : k)),
+        );
       } catch {
         // Error updating
       }
     },
-    [connection, authFetch]
-  )
+    [connection, authFetch],
+  );
 
   // Update TTL
   const handleUpdateTTL = useCallback(
     async (key: string, action: "set" | "remove", ttl?: number) => {
-      if (!connection) return
+      if (!connection) return;
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         const response = await authFetch("/api/redis/ttl", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, key, action, ttl }),
-        })
-        const data = await response.json()
+        });
+        const data = await response.json();
         if (data.success) {
-          const newTTL = data.ttl
-          setSelectedKey((prev) => (prev && prev.key === key ? { ...prev, ttl: newTTL } : prev))
-          setKeys((prev) => prev.map((k) => (k.key === key ? { ...k, ttl: newTTL } : k)))
+          const newTTL = data.ttl;
+          setSelectedKey((prev) =>
+            prev && prev.key === key ? { ...prev, ttl: newTTL } : prev,
+          );
+          setKeys((prev) =>
+            prev.map((k) => (k.key === key ? { ...k, ttl: newTTL } : k)),
+          );
         }
       } catch {
         // Error updating TTL
       }
     },
-    [connection, authFetch]
-  )
+    [connection, authFetch],
+  );
 
   // Delete a key
   const handleDeleteKey = useCallback(
     async (keyName: string) => {
-      if (!connection) return
+      if (!connection) return;
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         await authFetch("/api/redis/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, keys: [keyName] }),
-        })
-        setKeys((prev) => prev.filter((k) => k.key !== keyName))
+        });
+        setKeys((prev) => prev.filter((k) => k.key !== keyName));
         if (selectedKey?.key === keyName) {
-          setSelectedKey(null)
+          setSelectedKey(null);
         }
-        fetchStats(connection)
+        fetchStats(connection);
       } catch {
         // Error deleting
       }
     },
-    [connection, selectedKey, fetchStats, authFetch]
-  )
+    [connection, selectedKey, fetchStats, authFetch],
+  );
 
   // CLI command execution
   const handleCLICommand = useCallback(
     async (command: string): Promise<string> => {
-      if (!connection) return "(error) Not connected"
+      if (!connection) return "(error) Not connected";
       try {
-        const config = buildApiConfig(connection)
+        const config = buildApiConfig(connection);
         const response = await authFetch("/api/redis/command", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config, command }),
-        })
-        const data = await response.json()
+        });
+        const data = await response.json();
 
         // After certain commands, refresh keys and stats
-        const cmd = command.trim().split(/\s+/)[0]?.toUpperCase()
-        if (["SET", "DEL", "FLUSHDB", "FLUSHALL", "RENAME", "EXPIRE", "PERSIST", "HSET", "LPUSH", "RPUSH", "SADD", "ZADD", "XADD", "MSET"].includes(cmd || "")) {
-          fetchKeys(connection)
-          fetchStats(connection)
+        const cmd = command.trim().split(/\s+/)[0]?.toUpperCase();
+        if (
+          [
+            "SET",
+            "DEL",
+            "FLUSHDB",
+            "FLUSHALL",
+            "RENAME",
+            "EXPIRE",
+            "PERSIST",
+            "HSET",
+            "LPUSH",
+            "RPUSH",
+            "SADD",
+            "ZADD",
+            "XADD",
+            "MSET",
+          ].includes(cmd || "")
+        ) {
+          fetchKeys(connection);
+          fetchStats(connection);
         }
 
-        return data.result || ""
+        return data.result || "";
       } catch (err) {
-        return `(error) ${err instanceof Error ? err.message : "Command failed"}`
+        return `(error) ${err instanceof Error ? err.message : "Command failed"}`;
       }
     },
-    [connection, fetchKeys, fetchStats, authFetch]
-  )
+    [connection, fetchKeys, fetchStats, authFetch],
+  );
 
   // Refresh all data
   const handleRefresh = useCallback(() => {
     if (connection) {
-      fetchKeys(connection)
-      fetchStats(connection)
+      fetchKeys(connection);
+      fetchStats(connection);
     }
-  }, [connection, fetchKeys, fetchStats])
+  }, [connection, fetchKeys, fetchStats]);
+
+  // Handle refresh interval change
+  const handleRefreshIntervalChange = useCallback((interval: number) => {
+    setRefreshInterval(Math.max(10, interval));
+  }, []);
+
+  // Handle add key dialog
+  const handleOpenAddDialog = useCallback(() => {
+    setShowAddDialog(true);
+  }, []);
+
+  // Handle manual refresh
+  const handleManualRefresh = useCallback(() => {
+    if (connection) {
+      fetchKeys(connection);
+    }
+  }, [connection, fetchKeys]);
+
+  // Handle auto-refresh toggle
+  const handleToggleAutoRefresh = useCallback((enabled: boolean) => {
+    setIsAutoRefresh(enabled);
+  }, []);
 
   // Auto-refresh timer
   useEffect(() => {
-    if (!isAutoRefresh || !connection) return
+    if (!isAutoRefresh || !connection) return;
 
     const interval = setInterval(() => {
-      fetchKeys(connection)
-      fetchStats(connection)
-    }, refreshInterval * 1000)
+      fetchKeys(connection);
+      fetchStats(connection);
+    }, refreshInterval * 1000);
 
-    return () => clearInterval(interval)
-  }, [isAutoRefresh, connection, fetchKeys, fetchStats, refreshInterval])
+    return () => clearInterval(interval);
+  }, [isAutoRefresh, connection, fetchKeys, fetchStats, refreshInterval]);
 
   // Show login page if authentication is required and user is not authenticated
   if (requiresAuth && !isAuthenticated) {
-    return <LoginPage />
+    return <LoginPage />;
   }
 
   // Connection is auto-initialized from environment variables
   if (!connection) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    );
   }
 
   return (
@@ -413,7 +487,9 @@ export default function RedisUI() {
             className="mb-4 flex cursor-pointer items-center gap-2"
             onClick={() => setShowStats(!showStats)}
           >
-            <h2 className="text-lg font-semibold tracking-tight">System Status</h2>
+            <h2 className="text-lg font-semibold tracking-tight">
+              System Status
+            </h2>
             {showStats ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -431,7 +507,9 @@ export default function RedisUI() {
         <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
           {/* Data Explorer Section (Keys + Viewer) */}
           <section className="flex flex-1 flex-col min-w-0 space-y-4">
-            <h2 className="text-lg font-semibold tracking-tight flex-shrink-0">Data Explorer</h2>
+            <h2 className="text-lg font-semibold tracking-tight flex-shrink-0">
+              Data Explorer
+            </h2>
             <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
               {/* Column 1: Key List */}
               <div className="w-96 flex-shrink-0 flex flex-col">
@@ -439,14 +517,14 @@ export default function RedisUI() {
                   keys={keys}
                   selectedKey={selectedKey}
                   onSelectKey={handleSelectKey}
-                  onAddKey={() => setShowAddDialog(true)}
+                  onAddKey={handleOpenAddDialog}
                   onDeleteKey={handleDeleteKey}
-                  onRefresh={() => connection && fetchKeys(connection)}
+                  onRefresh={handleManualRefresh}
                   isLoading={isLoadingKeys}
                   isAutoRefresh={isAutoRefresh}
-                  onToggleAutoRefresh={setIsAutoRefresh}
+                  onToggleAutoRefresh={handleToggleAutoRefresh}
                   refreshInterval={refreshInterval}
-                  onRefreshIntervalChange={(interval) => setRefreshInterval(Math.max(10, interval))}
+                  onRefreshIntervalChange={handleRefreshIntervalChange}
                 />
               </div>
 
@@ -466,9 +544,15 @@ export default function RedisUI() {
           {showCLI && (
             <div className="w-96 flex-shrink-0 flex flex-col border-l pl-6 pt-[44px]">
               <div className="flex flex-col h-full space-y-4">
-                <div className="flex items-center justify-between flex-shrink-0 h-[28px]"> {/* Align with Data Explorer header roughly? No, title is in section above. */}
+                <div className="flex items-center justify-between flex-shrink-0 h-[28px]">
+                  {" "}
+                  {/* Align with Data Explorer header roughly? No, title is in section above. */}
                   <h2 className="text-lg font-semibold tracking-tight">CLI</h2>
-                  <Button variant="ghost" size="icon" onClick={() => setShowCLI(false)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowCLI(false)}
+                  >
                     <ChevronDown className="h-4 w-4 rotate-90" />
                   </Button>
                 </div>
@@ -487,5 +571,5 @@ export default function RedisUI() {
         onAddKey={handleAddKey}
       />
     </div>
-  )
+  );
 }

@@ -17,7 +17,7 @@ import { RefreshCw, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SessionCountdown() {
-  const { isAuthenticated, renewToken, logout } = useAuth();
+  const { isAuthenticated, authType, renewToken, logout } = useAuth();
   const [timeLeft, setTimeLeft] = useState<{
     minutes: number;
     seconds: number;
@@ -25,9 +25,14 @@ export function SessionCountdown() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
 
+  // Only show/manage countdown for Azure AD sessions.
+  if (!isAuthenticated || authType !== "azure") {
+    return null;
+  }
+
   // Initialize session start time from localStorage or set new one
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && authType === "azure") {
       const storedTime = localStorage.getItem("azure-session-start");
       if (storedTime) {
         setSessionStartTime(new Date(storedTime));
@@ -40,11 +45,11 @@ export function SessionCountdown() {
       setSessionStartTime(null);
       localStorage.removeItem("azure-session-start");
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authType]);
 
   // Countdown timer
   useEffect(() => {
-    if (!sessionStartTime || !isAuthenticated) {
+    if (!sessionStartTime) {
       setTimeLeft(null);
       return;
     }
@@ -85,7 +90,7 @@ export function SessionCountdown() {
     setIsRefreshing(true);
     try {
       await renewToken();
-      // Reset session start time
+      // Reset Azure session start time
       const now = new Date();
       localStorage.setItem("azure-session-start", now.toISOString());
       setSessionStartTime(now);
@@ -96,7 +101,7 @@ export function SessionCountdown() {
     }
   }, [renewToken, isRefreshing]);
 
-  if (!isAuthenticated || !timeLeft) {
+  if (!timeLeft) {
     return null;
   }
 

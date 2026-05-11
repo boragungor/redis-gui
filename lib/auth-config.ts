@@ -71,6 +71,16 @@ export function isLocalLoginEnabled(): boolean {
   return process.env.NEXT_PUBLIC_ENABLE_LOCAL_LOGIN === "true";
 }
 
+// Check if MongoDB login is enabled
+export function isMongoDBLoginEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_MONGODB_LOGIN === "true";
+}
+
+// Check if any authentication is required
+export function isAuthenticationRequired(): boolean {
+  return isAzureAdConfigured() || isMongoDBLoginEnabled();
+}
+
 // Session timeout configuration (same as acpanel)
 export const SESSION_TIMEOUT_MINUTES = 15;
 export const SESSION_WARNING_THRESHOLD_MINUTES = 1; // Auto-refresh when less than 1 minute remains

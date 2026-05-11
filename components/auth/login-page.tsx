@@ -1,67 +1,108 @@
-"use client"
+"use client";
 
 /**
  * Login Page Component
  * Displays login options (Azure AD and optional local login)
  */
 
-import React, { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { isLocalLoginEnabled } from "@/lib/auth-config"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, LogIn } from "lucide-react"
+import React, { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { isLocalLoginEnabled, isMongoDBLoginEnabled } from "@/lib/auth-config";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, LogIn } from "lucide-react";
 
 interface LoginPageProps {
-  onSuccess?: () => void
+  onSuccess?: () => void;
 }
 
 export function LoginPage({ onSuccess }: LoginPageProps) {
-  const { login, isLoading } = useAuth()
-  const [error, setError] = useState<string | null>(null)
-  const [showLocalLogin, setShowLocalLogin] = useState(false)
-  const [localUsername, setLocalUsername] = useState("")
-  const [localPassword, setLocalPassword] = useState("")
-  const [isLocalLoading, setIsLocalLoading] = useState(false)
+  const { login, isLoading } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [showMongoDBLogin, setShowMongoDBLogin] = useState(false);
+  const [mongoUsername, setMongoUsername] = useState("");
+  const [mongoPassword, setMongoPassword] = useState("");
+  const [isMongoLoading, setIsMongoLoading] = useState(false);
 
   const handleAzureLogin = async () => {
-    setError(null)
+    setError(null);
     try {
-      await login()
-      onSuccess?.()
+      await login();
+      onSuccess?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Azure AD login failed")
+      setError(err instanceof Error ? err.message : "Azure AD login failed");
     }
-  }
+  };
 
-  const handleLocalLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setIsLocalLoading(true)
+  const handleMongoDBLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsMongoLoading(true);
 
     try {
-      // TODO: Implement local login API call
-      // This is a placeholder - you'll need to implement actual local auth
-      const response = await fetch("/api/auth/local-login", {
+      // First, clear any existing Azure AD sessions
+      console.log("Clearing any existing Azure AD sessions");
+      localStorage.removeItem("msal.account.keys");
+      localStorage.removeItem("msal.token.keys");
+      // Clear all MSAL-related items
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("msal.")) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      const response = await fetch("/api/auth/mongodb-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: localUsername, password: localPassword }),
-      })
+        body: JSON.stringify({
+          username: mongoUsername,
+          password: mongoPassword,
+        }),
+      });
 
-      if (!response.ok) {
-        throw new Error("Invalid credentials")
+      const data = await response.json();
+
+      console.log("MongoDB login response:", data);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Invalid credentials");
       }
 
-      onSuccess?.()
+      // Store MongoDB session info in localStorage
+      const sessionData = {
+        userId: data.data.userId,
+        username: data.data.username,
+        firstname: data.data.firstname,
+        lastname: data.data.lastname,
+        email: data.data.email,
+        token: data.data.token,
+        tokenExpiry: data.data.tokenExpiry,
+        authType: "mongodb",
+      };
+
+      console.log("Storing MongoDB session:", sessionData);
+      localStorage.setItem("mongodb-session", JSON.stringify(sessionData));
+
+      // Store session start time for countdown
+      localStorage.setItem("azure-session-start", new Date().toISOString());
+
+      // Reload to trigger authentication state update
+      window.location.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Local login failed")
+      setError(err instanceof Error ? err.message : "MongoDB login failed");
     } finally {
-      setIsLocalLoading(false)
+      setIsMongoLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
@@ -73,7 +114,9 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">Redis UI</CardTitle>
-          <CardDescription>Sign in to access the Redis management interface</CardDescription>
+          <CardDescription>
+            Sign in to access the Redis management interface
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -105,37 +148,39 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
             </Button>
           </div>
 
-          {/* Local Login (Development) */}
-          {isLocalLoginEnabled() && (
+          {/* MongoDB Login */}
+          {isMongoDBLoginEnabled() && (
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
                 </div>
               </div>
 
-              {!showLocalLogin ? (
+              {!showMongoDBLogin ? (
                 <Button
-                  onClick={() => setShowLocalLogin(true)}
+                  onClick={() => setShowMongoDBLogin(true)}
                   variant="ghost"
                   className="w-full"
                   type="button"
                 >
-                  Local Login (Development)
+                  MongoDB Login
                 </Button>
               ) : (
-                <form onSubmit={handleLocalLogin} className="space-y-3">
+                <form onSubmit={handleMongoDBLogin} className="space-y-3">
                   <div className="space-y-2">
                     <Label htmlFor="username">Username</Label>
                     <Input
                       id="username"
                       type="text"
                       placeholder="Enter username"
-                      value={localUsername}
-                      onChange={(e) => setLocalUsername(e.target.value)}
+                      value={mongoUsername}
+                      onChange={(e) => setMongoUsername(e.target.value)}
                       required
                     />
                   </div>
@@ -145,14 +190,18 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                       id="password"
                       type="password"
                       placeholder="Enter password"
-                      value={localPassword}
-                      onChange={(e) => setLocalPassword(e.target.value)}
+                      value={mongoPassword}
+                      onChange={(e) => setMongoPassword(e.target.value)}
                       required
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button type="submit" disabled={isLocalLoading} className="flex-1">
-                      {isLocalLoading ? (
+                    <Button
+                      type="submit"
+                      disabled={isMongoLoading}
+                      className="flex-1"
+                    >
+                      {isMongoLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Signing in...
@@ -164,7 +213,7 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => setShowLocalLogin(false)}
+                      onClick={() => setShowMongoDBLogin(false)}
                     >
                       Cancel
                     </Button>
@@ -180,5 +229,5 @@ export function LoginPage({ onSuccess }: LoginPageProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
