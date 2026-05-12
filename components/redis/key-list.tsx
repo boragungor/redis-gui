@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   type RedisKey,
   type RedisDataType,
@@ -20,34 +20,27 @@ import {
   defaultTypeColor,
   formatTTL,
   formatBytes,
-} from "@/lib/redis-mock-data"
-import {
-  Search,
-  Plus,
-  RefreshCw,
-  Clock,
-  Database,
-  Trash2,
-} from "lucide-react"
+} from "@/lib/redis-mock-data";
+import { Search, Plus, RefreshCw, Clock, Database, Trash2 } from "lucide-react";
 
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface KeyListProps {
-  keys: RedisKey[]
-  selectedKey: RedisKey | null
-  onSelectKey: (key: RedisKey) => void
-  onAddKey: () => void
-  onDeleteKey: (key: string) => void
-  onRefresh?: () => void
-  isLoading?: boolean
-  isAutoRefresh?: boolean
-  onToggleAutoRefresh?: (enabled: boolean) => void
-  refreshInterval?: number
-  onRefreshIntervalChange?: (interval: number) => void
+  keys: RedisKey[];
+  selectedKey: RedisKey | null;
+  onSelectKey: (key: RedisKey) => void;
+  onAddKey: () => void;
+  onDeleteKey: (key: string) => void;
+  onRefresh?: () => void;
+  isLoading?: boolean;
+  isAutoRefresh?: boolean;
+  onToggleAutoRefresh?: (enabled: boolean) => void;
+  refreshInterval?: number;
+  onRefreshIntervalChange?: (interval: number) => void;
 }
 
-export function KeyList({
+export const KeyList = React.memo(function KeyList({
   keys,
   selectedKey,
   onSelectKey,
@@ -57,17 +50,17 @@ export function KeyList({
   isLoading,
   isAutoRefresh = false,
   onToggleAutoRefresh,
-  refreshInterval = 5,
+  refreshInterval = 10,
   onRefreshIntervalChange,
 }: KeyListProps) {
-  const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const filteredKeys = keys.filter((key) => {
-    const matchesSearch = key.key.toLowerCase().includes(search.toLowerCase())
-    const matchesType = typeFilter === "all" || key.type === typeFilter
-    return matchesSearch && matchesType
-  })
+    const matchesSearch = key.key.toLowerCase().includes(search.toLowerCase());
+    const matchesType = typeFilter === "all" || key.type === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
   return (
     <Card className="flex h-full flex-col border-border/50">
@@ -91,16 +84,30 @@ export function KeyList({
                 <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-200">
                   <Input
                     type="number"
-                    min={1}
+                    min={10}
                     value={refreshInterval}
-                    onChange={(e) => onRefreshIntervalChange?.(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) =>
+                      onRefreshIntervalChange?.(
+                        Math.max(10, parseInt(e.target.value) || 10),
+                      )
+                    }
                     className="h-6 w-12 px-1 py-0 text-center text-xs"
                   />
-                  <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground whitespace-nowrap">s</Label>
+                  <Label
+                    htmlFor="auto-refresh"
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                  >
+                    s
+                  </Label>
                 </div>
               )}
               {!isAutoRefresh && (
-                <Label htmlFor="auto-refresh" className="text-xs text-muted-foreground whitespace-nowrap hidden xl:inline-block">Auto</Label>
+                <Label
+                  htmlFor="auto-refresh"
+                  className="text-xs text-muted-foreground whitespace-nowrap hidden xl:inline-block"
+                >
+                  Auto
+                </Label>
               )}
             </div>
             <Button
@@ -110,7 +117,9 @@ export function KeyList({
               onClick={onRefresh}
               disabled={isLoading}
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              />
             </Button>
             <Button
               variant="default"
@@ -152,8 +161,8 @@ export function KeyList({
         <ScrollArea className="h-full">
           <div className="space-y-1 p-3 pt-0 min-w-max">
             {filteredKeys.map((item) => {
-              const colors = typeColors[item.type] || defaultTypeColor
-              const isSelected = selectedKey?.key === item.key
+              const colors = typeColors[item.type] || defaultTypeColor;
+              const isSelected = selectedKey?.key === item.key;
               return (
                 <div
                   key={item.key}
@@ -162,14 +171,15 @@ export function KeyList({
                   onClick={() => onSelectKey(item)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      onSelectKey(item)
+                      e.preventDefault();
+                      onSelectKey(item);
                     }
                   }}
-                  className={`group flex w-full min-w-fit cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${isSelected
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-transparent hover:bg-muted/50"
-                    }`}
+                  className={`group flex w-full min-w-fit cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left transition-colors ${
+                    isSelected
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-transparent hover:bg-muted/50"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-mono text-sm font-medium whitespace-nowrap">
@@ -180,8 +190,8 @@ export function KeyList({
                       size="icon"
                       className="h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                       onClick={(e) => {
-                        e.stopPropagation()
-                        onDeleteKey(item.key)
+                        e.stopPropagation();
+                        onDeleteKey(item.key);
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -205,7 +215,7 @@ export function KeyList({
                     )}
                   </div>
                 </div>
-              )
+              );
             })}
             {filteredKeys.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
@@ -217,28 +227,28 @@ export function KeyList({
         </ScrollArea>
       </CardContent>
     </Card>
-  )
-}
+  );
+});
 
 function TTLCountdown({ ttl }: { ttl: number }) {
-  const [currentTTL, setCurrentTTL] = useState<number>(ttl)
+  const [currentTTL, setCurrentTTL] = useState<number>(ttl);
 
   useEffect(() => {
-    setCurrentTTL(ttl)
-  }, [ttl])
+    setCurrentTTL(ttl);
+  }, [ttl]);
 
   useEffect(() => {
-    if (currentTTL <= 0) return
+    if (currentTTL <= 0) return;
 
     const interval = setInterval(() => {
       setCurrentTTL((prev) => {
-        if (prev <= 0) return 0
-        return prev - 1
-      })
-    }, 1000)
+        if (prev <= 0) return 0;
+        return prev - 1;
+      });
+    }, 1000);
 
-    return () => clearInterval(interval)
-  }, [currentTTL])
+    return () => clearInterval(interval);
+  }, [currentTTL]);
 
-  return <>{formatTTL(currentTTL)}</>
+  return <>{formatTTL(currentTTL)}</>;
 }
