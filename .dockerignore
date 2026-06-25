@@ -1,7 +1,8 @@
+node_modules
+.next
 .git
-.github
-node_modules/
-.next/
+.gitignore
+.vscode
 .env*
 *.md
 Jenkinsfile

@@ -1,11 +1,19 @@
-# Stage 1: Build
-FROM public.ecr.aws/docker/library/node:18 AS builder
-WORKDIR /usr/src/app
+# --- Base stage ---
+FROM public.ecr.aws/docker/library/node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+# --- Dependencies stage ---
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
-COPY . ./
+# --- Build stage ---
+FROM base AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
 # NEXT_PUBLIC_* vars are baked into the bundle at build time
 ARG NEXT_PUBLIC_AZURE_AD_TENANT_ID
@@ -17,6 +25,7 @@ ARG NEXT_PUBLIC_ENABLE_LOCAL_LOGIN
 ARG NEXT_PUBLIC_REDIS_HOST
 ARG NEXT_PUBLIC_REDIS_PORT
 ARG NEXT_PUBLIC_REDIS_DATABASE
+ARG NEXT_PUBLIC_BASE_PATH
 
 ENV NEXT_PUBLIC_AZURE_AD_TENANT_ID=$NEXT_PUBLIC_AZURE_AD_TENANT_ID
 ENV NEXT_PUBLIC_AZURE_AD_CLIENT_ID=$NEXT_PUBLIC_AZURE_AD_CLIENT_ID
@@ -27,25 +36,23 @@ ENV NEXT_PUBLIC_ENABLE_LOCAL_LOGIN=$NEXT_PUBLIC_ENABLE_LOCAL_LOGIN
 ENV NEXT_PUBLIC_REDIS_HOST=$NEXT_PUBLIC_REDIS_HOST
 ENV NEXT_PUBLIC_REDIS_PORT=$NEXT_PUBLIC_REDIS_PORT
 ENV NEXT_PUBLIC_REDIS_DATABASE=$NEXT_PUBLIC_REDIS_DATABASE
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 
-RUN npm run build
+RUN pnpm build
 
-# Stage 2: Run
-FROM public.ecr.aws/docker/library/node:18-alpine
+# --- Production stage ---
+FROM public.ecr.aws/docker/library/node:22-alpine AS runner
 
 RUN apk update && apk upgrade
 
 RUN addgroup -g 1001 -S appuser \
     && adduser -h /home/appuser appuser -u 1001 -G appuser --disabled-password
 
-RUN mkdir -p /app && chown -R appuser:appuser /app
-
 WORKDIR /app
 
-# Copy standalone output from builder
-COPY --from=builder --chown=appuser:appuser /usr/src/app/.next/standalone ./
-COPY --from=builder --chown=appuser:appuser /usr/src/app/.next/static ./.next/static
-COPY --from=builder --chown=appuser:appuser /usr/src/app/public ./public
+COPY --from=builder --chown=appuser:appuser /app/public ./public
+COPY --from=builder --chown=appuser:appuser /app/.next/standalone ./
+COPY --from=builder --chown=appuser:appuser /app/.next/static ./.next/static
 
 USER appuser
 
