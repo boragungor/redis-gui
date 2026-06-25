@@ -23,4 +23,12 @@ services:
       - MONGODB_DATABASE=${MONGODB_DATABASE}
       - MONGODB_COLLECTION=${MONGODB_COLLECTION:-AdminUsers}
       - MONGODB_AUTH_SOURCE=${MONGODB_AUTH_SOURCE:-admin}
+      # Server-side secrets / Redis target (runtime only, never baked into image)
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DATABASE=${REDIS_DATABASE:-0}
+      - REDIS_USERNAME=${REDIS_USERNAME:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_USE_TLS=${REDIS_USE_TLS:-false}
     restart: unless-stopped
