@@ -7,6 +7,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { MongoClient, type MongoClientOptions } from "mongodb";
 import crypto from "crypto";
 import { signMongoToken } from "@/lib/api-auth";
+import {
+  rateLimitKey,
+  checkRateLimit,
+  recordFailure,
+  clearRateLimit,
+} from "@/lib/login-rate-limit";
+
+function getClientIp(request: NextRequest): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip") || "unknown";
+}
 
 interface LoginRequest {
   username: string;
@@ -48,6 +60,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Username and password are required" },
         { status: 400 },
+      );
+    }
+
+    // Rate limit brute-force attempts (keyed by client IP + username).
+    const rlKey = rateLimitKey(getClientIp(request), username);
+    const rl = checkRateLimit(rlKey);
+    if (rl.limited) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many failed attempts. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        },
       );
     }
 
@@ -100,6 +128,7 @@ export async function POST(request: NextRequest) {
     const user = await collection.findOne({ Username: username });
 
     if (!user) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
@@ -108,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user is active (Status = 1)
     if (user.Status !== 1) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "User account is inactive" },
         { status: 401 },
@@ -117,11 +147,15 @@ export async function POST(request: NextRequest) {
     // Hash input password and compare with stored hash
     const hashedPassword = hashPassword(password);
     if (hashedPassword !== user.UserPassword) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
       );
     }
+
+    // Successful auth — clear the failure counter for this key.
+    clearRateLimit(rlKey);
 
     // Issue a signed JWT (valid 15 minutes) the server can verify on each
     // request. Replaces the previous opaque random token.
