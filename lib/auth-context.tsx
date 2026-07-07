@@ -214,14 +214,17 @@ export function AuthProvider({
         ...loginRequest,
         account: user,
       });
-      return response.accessToken;
+      // Send the ID token, not the Graph access token. The access token has
+      // aud=Microsoft Graph and a `nonce` header, so our API cannot verify it.
+      // The ID token has aud=our client ID and is verifiable via JWKS.
+      return response.idToken;
     } catch (error) {
       console.error("Token acquisition failed:", error);
 
       // If silent acquisition fails, try interactive
       try {
         const response = await instance.acquireTokenPopup(loginRequest);
-        return response.accessToken;
+        return response.idToken;
       } catch (popupError) {
         console.error("Interactive token acquisition failed:", popupError);
         return null;
