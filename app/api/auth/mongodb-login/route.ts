@@ -6,11 +6,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MongoClient } from "mongodb";
 import crypto from "crypto";
+import { signMongoToken } from "@/lib/api-auth";
 
 interface LoginRequest {
   username: string;
   password: string;
 }
+
+const SESSION_TTL_SECONDS = 15 * 60; // 15 minutes
 
 interface AdminUser {
   AdminUserID: number;
@@ -28,11 +31,6 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha1").update(password).digest("hex").toUpperCase();
 }
 
-// Generate random session token
-function generateToken(): string {
-  return crypto.randomBytes(16).toString("hex").toUpperCase();
-}
-
 export async function POST(request: NextRequest) {
   let client: MongoClient | null = null;
 
@@ -40,7 +38,13 @@ export async function POST(request: NextRequest) {
     const body: LoginRequest = await request.json();
     const { username, password } = body;
 
-    if (!username || !password) {
+    // Require strings — rejects NoSQL operator injection like {"$ne": null}.
+    if (
+      typeof username !== "string" ||
+      typeof password !== "string" ||
+      !username ||
+      !password
+    ) {
       return NextResponse.json(
         { success: false, error: "Username and password are required" },
         { status: 400 },
@@ -100,9 +104,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate session token (valid for 15 minutes like Azure AD)
-    const token = generateToken();
-    const sessionExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    // Issue a signed JWT (valid 15 minutes) the server can verify on each
+    // request. Replaces the previous opaque random token.
+    const token = await signMongoToken({
+      userId: user.AdminUserID,
+      username: user.Username,
+      name: `${user.Firstname || ""} ${user.Lastname || ""}`.trim() || user.Username,
+      email: user.EmailAddress,
+      expiresInSeconds: SESSION_TTL_SECONDS,
+    });
+    const sessionExpiry = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 
     // Return user info and token
     return NextResponse.json({

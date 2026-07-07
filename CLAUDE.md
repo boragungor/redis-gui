@@ -37,12 +37,30 @@ MONGODB_AUTH_SOURCE=admin
 
 NEXT_PUBLIC_ENABLE_LOCAL_LOGIN=false
 
+# Secret for signing MongoDB session JWTs (server-only, required for login)
+AUTH_JWT_SECRET=
+
+# Redis connection — server-side only, never sent by the client
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DATABASE=0
+# REDIS_USERNAME=
+# REDIS_PASSWORD=
+# REDIS_USE_TLS=false
+
+# Redis defaults shown in the UI (display only, not used to connect)
 NEXT_PUBLIC_REDIS_HOST=localhost
 NEXT_PUBLIC_REDIS_PORT=6379
 NEXT_PUBLIC_REDIS_DATABASE=0
 ```
 
 Redis and MongoDB must be running locally before starting the app.
+
+### Authentication & connection model (security-critical)
+
+- Every `/api/redis/*` route is wrapped in `withAuth` (`lib/api-auth.ts`), which validates **either** an Azure AD JWT (via JWKS) **or** a MongoDB session JWT (HS256, signed with `AUTH_JWT_SECRET`). A token's mere presence is not enough — it must verify.
+- The Redis connection target comes from `lib/server-redis-config.ts` (`REDIS_*` env vars), **never** from the client request body. Do not reintroduce client-supplied `host`/`port` — that is the SSRF hole that was closed.
+- `app/api/auth/mongodb-login` issues the signed JWT via `signMongoToken`; the client stores it in `localStorage` as `mongodb-session`.
 
 ## Architecture
 

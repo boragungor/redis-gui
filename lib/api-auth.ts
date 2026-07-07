@@ -4,7 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
-import { jwtVerify, createRemoteJWKSet } from "jose"
+import { jwtVerify, createRemoteJWKSet, SignJWT } from "jose"
 
 interface TokenPayload {
   oid: string // Object ID (user ID)
@@ -13,6 +13,57 @@ interface TokenPayload {
   email?: string
   roles?: string[]
   groups?: string[]
+  authType?: "azure" | "mongodb"
+}
+
+/**
+ * Secret used to sign and verify MongoDB session JWTs.
+ * Must be set in production; throwing here prevents silently issuing
+ * unverifiable tokens.
+ */
+function getMongoJwtSecret(): Uint8Array {
+  const secret = process.env.AUTH_JWT_SECRET
+  if (!secret) {
+    throw new Error("AUTH_JWT_SECRET is not configured")
+  }
+  return new TextEncoder().encode(secret)
+}
+
+/**
+ * Issue a signed JWT for a MongoDB-authenticated user.
+ * Replaces the previous opaque random token that the server could not verify.
+ */
+export async function signMongoToken(payload: {
+  userId: string | number
+  username: string
+  name?: string
+  email?: string
+  expiresInSeconds: number
+}): Promise<string> {
+  return new SignJWT({
+    oid: String(payload.userId),
+    name: payload.name,
+    email: payload.email,
+    preferred_username: payload.username,
+    authType: "mongodb",
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + payload.expiresInSeconds)
+    .sign(getMongoJwtSecret())
+}
+
+/**
+ * Verify a MongoDB session JWT signed by signMongoToken.
+ */
+async function verifyMongoToken(token: string): Promise<TokenPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getMongoJwtSecret())
+    if (payload.authType !== "mongodb") return null
+    return payload as unknown as TokenPayload
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -110,7 +161,8 @@ export async function withAuth(
     )
   }
 
-  const user = await verifyAzureToken(token)
+  // Accept either an Azure AD token or a MongoDB-session JWT.
+  const user = (await verifyMongoToken(token)) ?? (await verifyAzureToken(token))
 
   if (!user) {
     return new Response(

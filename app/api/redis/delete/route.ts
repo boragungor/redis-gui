@@ -1,22 +1,25 @@
-import { NextResponse } from "next/server"
-import { type RedisConnectionConfig, withRedis } from "@/lib/redis-client"
+import { type NextRequest, NextResponse } from "next/server"
+import { withRedis } from "@/lib/redis-client"
+import { withAuth } from "@/lib/api-auth"
+import { getServerRedisConfig } from "@/lib/server-redis-config"
 
-export async function POST(request: Request) {
-  try {
-    const { config, keys } = (await request.json()) as {
-      config: RedisConnectionConfig
-      keys: string[]
+export async function POST(request: NextRequest) {
+  return withAuth(request, async () => {
+    try {
+      const { keys } = (await request.json()) as { keys: string[] }
+      const config = getServerRedisConfig()
+
+      const result = await withRedis(config, async (client) => {
+        const deleted = await client.del(...keys)
+        return { deleted }
+      })
+
+      return NextResponse.json({ success: true, ...result })
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Failed to delete key" },
+        { status: 500 },
+      )
     }
-
-    const result = await withRedis(config, async (client) => {
-      const deleted = await client.del(...keys)
-      return { deleted }
-    })
-
-    return NextResponse.json({ success: true, ...result })
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to delete key"
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
-  }
+  })
 }

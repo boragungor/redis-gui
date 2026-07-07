@@ -1,70 +1,72 @@
-import { NextResponse } from "next/server"
-import { type RedisConnectionConfig, withRedis } from "@/lib/redis-client"
+import { type NextRequest, NextResponse } from "next/server"
+import { withRedis } from "@/lib/redis-client"
+import { withAuth } from "@/lib/api-auth"
+import { getServerRedisConfig } from "@/lib/server-redis-config"
 
-export async function POST(request: Request) {
-  try {
-    const { config, command } = (await request.json()) as {
-      config: RedisConnectionConfig
-      command: string
-    }
+export async function POST(request: NextRequest) {
+  return withAuth(request, async () => {
+    try {
+      const { command } = (await request.json()) as { command: string }
+      const config = getServerRedisConfig()
 
-    // Parse the command string into parts respecting quoted strings
-    const parts: string[] = []
-    let current = ""
-    let inQuotes = false
-    let quoteChar = ""
+      // Parse the command string into parts respecting quoted strings
+      const parts: string[] = []
+      let current = ""
+      let inQuotes = false
+      let quoteChar = ""
 
-    for (const char of command) {
-      if (inQuotes) {
-        if (char === quoteChar) {
-          inQuotes = false
+      for (const char of command) {
+        if (inQuotes) {
+          if (char === quoteChar) {
+            inQuotes = false
+          } else {
+            current += char
+          }
+        } else if (char === '"' || char === "'") {
+          inQuotes = true
+          quoteChar = char
+        } else if (char === " " || char === "\t") {
+          if (current) {
+            parts.push(current)
+            current = ""
+          }
         } else {
           current += char
         }
-      } else if (char === '"' || char === "'") {
-        inQuotes = true
-        quoteChar = char
-      } else if (char === " " || char === "\t") {
-        if (current) {
-          parts.push(current)
-          current = ""
-        }
-      } else {
-        current += char
       }
-    }
-    if (current) parts.push(current)
+      if (current) parts.push(current)
 
-    if (parts.length === 0) {
-      return NextResponse.json({ success: true, result: "" })
-    }
+      if (parts.length === 0) {
+        return NextResponse.json({ success: true, result: "" })
+      }
 
-    const cmd = parts[0].toUpperCase()
-    const args = parts.slice(1)
+      const cmd = parts[0].toUpperCase()
+      const args = parts.slice(1)
 
-    // Block dangerous commands
-    const blockedCommands = ["SHUTDOWN", "DEBUG", "SLAVEOF", "REPLICAOF", "CONFIG SET"]
-    if (blockedCommands.includes(cmd) || (cmd === "CONFIG" && args[0]?.toUpperCase() === "SET")) {
+      // Block dangerous commands
+      const blockedCommands = ["SHUTDOWN", "DEBUG", "SLAVEOF", "REPLICAOF", "CONFIG SET"]
+      if (blockedCommands.includes(cmd) || (cmd === "CONFIG" && args[0]?.toUpperCase() === "SET")) {
+        return NextResponse.json({
+          success: true,
+          result: `(error) Command '${cmd}' is blocked for safety`,
+        })
+      }
+
+      const result = await withRedis(config, async (client) => {
+        const rawResult = await client.call(cmd, ...args)
+        return formatRedisResult(rawResult)
+      })
+
+      return NextResponse.json({ success: true, result })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Command execution failed"
       return NextResponse.json({
         success: true,
-        result: `(error) Command '${cmd}' is blocked for safety`,
+        result: `(error) ${message}`,
       })
     }
-
-    const result = await withRedis(config, async (client) => {
-      const rawResult = await client.call(cmd, ...args)
-      return formatRedisResult(rawResult)
-    })
-
-    return NextResponse.json({ success: true, result })
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Command execution failed"
-    return NextResponse.json({
-      success: true,
-      result: `(error) ${message}`,
-    })
-  }
+  })
 }
 
 function formatRedisResult(result: unknown): string {
