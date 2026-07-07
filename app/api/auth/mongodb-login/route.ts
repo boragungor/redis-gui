@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { MongoClient } from "mongodb";
+import { MongoClient, type MongoClientOptions } from "mongodb";
 import crypto from "crypto";
 import { signMongoToken } from "@/lib/api-auth";
 
@@ -67,11 +67,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build MongoDB connection string
-    const connectionString = `mongodb://${encodeURIComponent(mongoUsername)}:${encodeURIComponent(mongoPassword)}@${mongoHost}:${mongoPort}/?authSource=${mongoAuthSource}&readPreference=secondaryPreferred&ssl=true&tlsAllowInvalidCertificates=true&tlsAllowInvalidHostnames=true&directConnection=true`;
+    // Build MongoDB connection string (TLS options set via the options object
+    // below rather than the query string, so validation stays on by default).
+    const connectionString = `mongodb://${encodeURIComponent(mongoUsername)}:${encodeURIComponent(mongoPassword)}@${mongoHost}:${mongoPort}/?authSource=${mongoAuthSource}&readPreference=secondaryPreferred&directConnection=true`;
+
+    // TLS is on by default with full certificate + hostname validation.
+    // For a private CA, point MONGODB_TLS_CA_FILE at the CA bundle.
+    // MONGODB_TLS_INSECURE=true disables validation — dev only, and logs a warning.
+    const useTLS = (process.env.MONGODB_TLS ?? "true") !== "false";
+    const options: MongoClientOptions = { tls: useTLS };
+    if (useTLS) {
+      if (process.env.MONGODB_TLS_CA_FILE) {
+        options.tlsCAFile = process.env.MONGODB_TLS_CA_FILE;
+      }
+      if (process.env.MONGODB_TLS_INSECURE === "true") {
+        options.tlsAllowInvalidCertificates = true;
+        options.tlsAllowInvalidHostnames = true;
+        console.warn(
+          "MONGODB_TLS_INSECURE=true — MongoDB TLS certificate validation is DISABLED. Do not use in production.",
+        );
+      }
+    }
 
     // Connect to MongoDB
-    client = new MongoClient(connectionString);
+    client = new MongoClient(connectionString, options);
     await client.connect();
 
     const db = client.db(mongoDatabase);
