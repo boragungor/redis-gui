@@ -4,9 +4,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { MongoClient } from "mongodb";
+import { MongoClient, type MongoClientOptions } from "mongodb";
 import crypto from "crypto";
 import { signMongoToken } from "@/lib/api-auth";
+import {
+  rateLimitKey,
+  checkRateLimit,
+  recordFailure,
+  clearRateLimit,
+} from "@/lib/login-rate-limit";
+
+function getClientIp(request: NextRequest): string {
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return request.headers.get("x-real-ip") || "unknown";
+}
 
 interface LoginRequest {
   username: string;
@@ -51,6 +63,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Rate limit brute-force attempts (keyed by client IP + username).
+    const rlKey = rateLimitKey(getClientIp(request), username);
+    const rl = checkRateLimit(rlKey);
+    if (rl.limited) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many failed attempts. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        },
+      );
+    }
+
     // MongoDB connection configuration from environment
     const mongoHost = process.env.MONGODB_HOST || "localhost";
     const mongoPort = process.env.MONGODB_PORT || "27017";
@@ -67,11 +95,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build MongoDB connection string
-    const connectionString = `mongodb://${encodeURIComponent(mongoUsername)}:${encodeURIComponent(mongoPassword)}@${mongoHost}:${mongoPort}/?authSource=${mongoAuthSource}&readPreference=secondaryPreferred&ssl=true&tlsAllowInvalidCertificates=true&tlsAllowInvalidHostnames=true&directConnection=true`;
+    // Build MongoDB connection string (TLS options set via the options object
+    // below rather than the query string, so validation stays on by default).
+    const connectionString = `mongodb://${encodeURIComponent(mongoUsername)}:${encodeURIComponent(mongoPassword)}@${mongoHost}:${mongoPort}/?authSource=${mongoAuthSource}&readPreference=secondaryPreferred&directConnection=true`;
+
+    // TLS is on by default with full certificate + hostname validation.
+    // For a private CA, point MONGODB_TLS_CA_FILE at the CA bundle.
+    // MONGODB_TLS_INSECURE=true disables validation — dev only, and logs a warning.
+    const useTLS = (process.env.MONGODB_TLS ?? "true") !== "false";
+    const options: MongoClientOptions = { tls: useTLS };
+    if (useTLS) {
+      if (process.env.MONGODB_TLS_CA_FILE) {
+        options.tlsCAFile = process.env.MONGODB_TLS_CA_FILE;
+      }
+      if (process.env.MONGODB_TLS_INSECURE === "true") {
+        options.tlsAllowInvalidCertificates = true;
+        options.tlsAllowInvalidHostnames = true;
+        console.warn(
+          "MONGODB_TLS_INSECURE=true — MongoDB TLS certificate validation is DISABLED. Do not use in production.",
+        );
+      }
+    }
 
     // Connect to MongoDB
-    client = new MongoClient(connectionString);
+    client = new MongoClient(connectionString, options);
     await client.connect();
 
     const db = client.db(mongoDatabase);
@@ -81,6 +128,7 @@ export async function POST(request: NextRequest) {
     const user = await collection.findOne({ Username: username });
 
     if (!user) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
@@ -89,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user is active (Status = 1)
     if (user.Status !== 1) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "User account is inactive" },
         { status: 401 },
@@ -98,11 +147,15 @@ export async function POST(request: NextRequest) {
     // Hash input password and compare with stored hash
     const hashedPassword = hashPassword(password);
     if (hashedPassword !== user.UserPassword) {
+      recordFailure(rlKey);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
       );
     }
+
+    // Successful auth — clear the failure counter for this key.
+    clearRateLimit(rlKey);
 
     // Issue a signed JWT (valid 15 minutes) the server can verify on each
     // request. Replaces the previous opaque random token.
