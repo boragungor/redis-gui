@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { withRedis } from "@/lib/redis-client"
 import { withAuth } from "@/lib/api-auth"
 import { getServerRedisConfig } from "@/lib/server-redis-config"
+import { isCommandAllowed } from "@/lib/redis-command-allowlist"
 
 export async function POST(request: NextRequest) {
   return withAuth(request, async () => {
@@ -43,12 +44,14 @@ export async function POST(request: NextRequest) {
       const cmd = parts[0].toUpperCase()
       const args = parts.slice(1)
 
-      // Block dangerous commands
-      const blockedCommands = ["SHUTDOWN", "DEBUG", "SLAVEOF", "REPLICAOF", "CONFIG SET"]
-      if (blockedCommands.includes(cmd) || (cmd === "CONFIG" && args[0]?.toUpperCase() === "SET")) {
+      // Allowlist: only known-safe commands may run. Anything not listed
+      // (FLUSHALL, KEYS, EVAL, CONFIG SET, SHUTDOWN, ...) is rejected.
+      // CONFIG GET is the one read-only exception we permit.
+      const isConfigGet = cmd === "CONFIG" && args[0]?.toUpperCase() === "GET"
+      if (!isCommandAllowed(cmd) && !isConfigGet) {
         return NextResponse.json({
           success: true,
-          result: `(error) Command '${cmd}' is blocked for safety`,
+          result: `(error) Command '${cmd}' is not permitted`,
         })
       }
 

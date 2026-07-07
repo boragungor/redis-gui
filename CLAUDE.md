@@ -60,7 +60,8 @@ Redis and MongoDB must be running locally before starting the app.
 
 - Every `/api/redis/*` route is wrapped in `withAuth` (`lib/api-auth.ts`), which validates **either** an Azure AD JWT (via JWKS) **or** a MongoDB session JWT (HS256, signed with `AUTH_JWT_SECRET`). A token's mere presence is not enough — it must verify.
 - The Redis connection target comes from `lib/server-redis-config.ts` (`REDIS_*` env vars), **never** from the client request body. Do not reintroduce client-supplied `host`/`port` — that is the SSRF hole that was closed.
-- `app/api/auth/mongodb-login` issues the signed JWT via `signMongoToken`; the client stores it in `localStorage` as `mongodb-session`.
+- `app/api/auth/mongodb-login` issues the signed JWT via `signMongoToken`; the client stores it in `localStorage` as `mongodb-session`. MongoDB TLS validation is **on by default** — use `MONGODB_TLS_CA_FILE` for a private CA, and `MONGODB_TLS_INSECURE=true` only for local dev (it disables cert/hostname checks and logs a warning).
+- The CLI `command` route uses an **allowlist** (`lib/redis-command-allowlist.ts`) — only known-safe commands run; `FLUSHALL`, `KEYS`, `EVAL`, `CONFIG SET`, `ACL`, etc. are rejected (`CONFIG GET` is the one permitted exception). Add new commands to the allowlist, never switch back to a denylist.
 
 ## Architecture
 
