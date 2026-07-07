@@ -25,3 +25,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Local-only security notes (do not publish)
+SECURITY-FINDINGS.md

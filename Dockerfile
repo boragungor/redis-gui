@@ -62,5 +62,10 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NODE_ENV=production
 
+# Liveness check — hits the app root (honoring NEXT_PUBLIC_BASE_PATH) and treats
+# any non-5xx response as healthy. Uses node so no curl/wget dependency is needed.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000)+(process.env.NEXT_PUBLIC_BASE_PATH||'')+'/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+
 # MONGODB_* and other secrets are injected at runtime on the EC2 instance
 CMD ["node", "server.js"]
