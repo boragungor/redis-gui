@@ -23,6 +23,11 @@ services:
       - MONGODB_DATABASE=${MONGODB_DATABASE}
       - MONGODB_COLLECTION=${MONGODB_COLLECTION:-AdminUsers}
       - MONGODB_AUTH_SOURCE=${MONGODB_AUTH_SOURCE:-admin}
+      # MongoDB TLS — validation is ON by default. Set MONGODB_TLS_CA_FILE for a
+      # private CA; MONGODB_TLS_INSECURE=true disables validation (dev only).
+      - MONGODB_TLS=${MONGODB_TLS:-true}
+      - MONGODB_TLS_CA_FILE=${MONGODB_TLS_CA_FILE:-}
+      - MONGODB_TLS_INSECURE=${MONGODB_TLS_INSECURE:-false}
       # Server-side secrets / Redis target (runtime only, never baked into image)
       - AUTH_JWT_SECRET=${AUTH_JWT_SECRET}
       - REDIS_HOST=${REDIS_HOST:-localhost}
