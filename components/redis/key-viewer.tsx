@@ -357,17 +357,16 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
               >
                 {keyData.type}
               </Badge>
-              {keyData.encoding === "java" && (
+              {/* Only object graphs get a badge. A Java String value is just
+                  JSON in a thin envelope and stays editable, so flagging it
+                  would tag most keys without telling the user anything. */}
+              {isJavaReadOnly && (
                 <Badge
                   variant="secondary"
                   className="border-0 bg-amber-500/10 text-xs font-medium text-amber-600 dark:text-amber-400"
-                  title={
-                    isJavaReadOnly
-                      ? "Java-serialized object graph, decoded for display. Read-only: it cannot be re-serialized safely."
-                      : "Java-serialized value, decoded for display. Edits are written back in the Java format."
-                  }
+                  title="Java-serialized object graph, deserialized for display. Read-only: the decoded JSON cannot be turned back into Java class data."
                 >
-                  {isJavaReadOnly ? "JAVA · READ-ONLY" : "JAVA"}
+                  JAVA DESERIALIZED · READ-ONLY
                 </Badge>
               )}
               <span className="text-xs text-muted-foreground">
