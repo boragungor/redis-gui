@@ -82,6 +82,11 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
 
   // Helper to recursively parse JSON strings
   const tryParseAndClean = (value: any): { parsed: any; isJson: boolean } => {
+    // Already-structured data (e.g. a decoded Java-serialized value) needs no
+    // parsing — render it with the JSON viewer rather than the raw fallback.
+    if (typeof value === "object" && value !== null) {
+      return { parsed: value, isJson: true }
+    }
     if (typeof value !== "string") return { parsed: value, isJson: false }
 
     // Clean common prefixes (Java serialization, etc)
@@ -153,6 +158,18 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
   const renderValue = () => {
     switch (keyData.type) {
       case "string":
+        if (keyData.decodeError) {
+          return (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">
+                Could not decode Java-serialized value
+              </p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground break-all">
+                {keyData.decodeError}
+              </p>
+            </div>
+          )
+        }
         return (
           <div className="space-y-2">
             {isEditing ? (
@@ -314,6 +331,15 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
               >
                 {keyData.type}
               </Badge>
+              {keyData.encoding === "java" && (
+                <Badge
+                  variant="secondary"
+                  className="border-0 bg-amber-500/10 text-xs font-medium text-amber-600 dark:text-amber-400"
+                  title="Java-serialized value, decoded for display. Read-only — saving JSON would corrupt it."
+                >
+                  JAVA · READ-ONLY
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground">
                 {formatBytes(keyData.size)}
               </span>
@@ -338,9 +364,13 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                 <Button variant="ghost" size="icon" onClick={handleCopy}>
                   <Copy className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleEdit}>
-                  <Edit className="h-4 w-4" />
-                </Button>
+                {/* Decoded Java values are read-only: the displayed JSON is not
+                    the stored format, so saving it would corrupt the key. */}
+                {keyData.encoding !== "java" && (
+                  <Button variant="ghost" size="icon" onClick={handleEdit}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

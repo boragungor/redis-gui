@@ -239,6 +239,8 @@ export default function RedisUI() {
             ttl: data.data.ttl,
             size: data.data.size,
             value: data.data.value,
+            encoding: data.data.encoding,
+            decodeError: data.data.decodeError,
           };
           setSelectedKey(fullKey);
           // Also update the key in the list with latest metadata

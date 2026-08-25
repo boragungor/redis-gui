@@ -128,6 +128,9 @@ importers:
       ioredis:
         specifier: 5.9.2
         version: 5.9.2
+      java-deserialization:
+        specifier: ^0.1.0
+        version: 0.1.0
       jose:
         specifier: ^5.9.6
         version: 5.10.0
@@ -1471,6 +1474,9 @@ packages:
     resolution: {integrity: sha512-tAAg/72/VxOUW7RQSX1pIxJVucYKcjFjfvj60L57jrZpYCHC3XN0WCQ3sNYL4Gmvv+7GPvTAjc+KSdeNuE8oWQ==}
     engines: {node: '>=12.22.0'}
 
+  java-deserialization@0.1.0:
+    resolution: {integrity: sha512-USdyndx3Wd9KVqLwDTfEW4UN8y+hnrSjU+0li47kIa0NKTXJyLCZrkBx0payxCt+G55Tc+ubG/W96CaM3Rq/FQ==}
+
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
@@ -1563,6 +1569,10 @@ packages:
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
+
+  long@3.2.0:
+    resolution: {integrity: sha512-ZYvPPOMqUwPoDsbJaR10iQJYnMuZhRTvHYl62ErLIEX7RgFlziSBUUvrt3OVfc47QlHHpzPZYP17g3Fv7oeJkg==}
+    engines: {node: '>=0.6'}
 
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
@@ -3064,6 +3074,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  java-deserialization@0.1.0:
+    dependencies:
+      long: 3.2.0
+
   jiti@2.7.0: {}
 
   jose@5.10.0: {}
@@ -3124,6 +3138,8 @@ snapshots:
   lodash.isarguments@3.1.0: {}
 
   lodash@4.18.1: {}
+
+  long@3.2.0: {}
 
   loose-envify@1.4.0:
     dependencies:
