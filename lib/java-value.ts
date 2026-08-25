@@ -86,6 +86,70 @@ export async function decodeJavaValue(buf: Buffer): Promise<JavaDecodeResult> {
   }
 }
 
+/**
+ * Shape of a decoded Java value.
+ * - "string": the stream held a single java.lang.String (very common — services
+ *   often store JSON text through a JDK-serializing template). We can re-encode
+ *   these exactly, so they stay editable.
+ * - "object": a real object graph. We cannot rebuild arbitrary class data, so
+ *   these are read-only.
+ */
+export type JavaShape = "string" | "object"
+
+const TC_STRING = 0x74
+const TC_LONGSTRING = 0x7c
+/** Java writeUTF uses a 16-bit byte length; longer strings need TC_LONGSTRING. */
+const MAX_SHORT_UTF_BYTES = 0xffff
+
+/** True if the stream is a single top-level java.lang.String. */
+export function isJavaStringStream(buf: Buffer): boolean {
+  if (!looksLikeJavaSerialized(buf) || buf.length < 5) return false
+  return buf[4] === TC_STRING || buf[4] === TC_LONGSTRING
+}
+
+/**
+ * Encode text as Java "modified UTF-8" (JLS §DataInput.readUTF):
+ * - U+0000 is written as two bytes so it never appears as a NUL
+ * - supplementary characters are written as surrogate pairs (CESU-8)
+ * Everything else matches standard UTF-8, which is why Turkish/Czech text
+ * round-trips unchanged.
+ */
+function encodeModifiedUtf8(text: string): Buffer {
+  const bytes: number[] = []
+  for (let i = 0; i < text.length; i++) {
+    // Iterate UTF-16 code units so surrogates are emitted individually.
+    const code = text.charCodeAt(i)
+    if (code >= 0x0001 && code <= 0x007f) {
+      bytes.push(code)
+    } else if (code === 0 || code <= 0x07ff) {
+      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f))
+    } else {
+      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+    }
+  }
+  return Buffer.from(bytes)
+}
+
+/**
+ * Build a Java serialization stream containing a single String, byte-compatible
+ * with what ObjectOutputStream.writeObject(String) produces. This is what makes
+ * String-shaped values safely editable from the GUI.
+ */
+export function encodeJavaString(text: string): Buffer {
+  const body = encodeModifiedUtf8(text)
+  const header = Buffer.from(JAVA_STREAM_MAGIC)
+
+  if (body.length <= MAX_SHORT_UTF_BYTES) {
+    const len = Buffer.alloc(2)
+    len.writeUInt16BE(body.length, 0)
+    return Buffer.concat([header, Buffer.from([TC_STRING]), len, body])
+  }
+
+  const len = Buffer.alloc(8)
+  len.writeBigUInt64BE(BigInt(body.length), 0)
+  return Buffer.concat([header, Buffer.from([TC_LONGSTRING]), len, body])
+}
+
 /** Boxed primitives carry their payload in a `value` field; unwrap them. */
 const BOXED_PRIMITIVES = new Set([
   "java.lang.Integer",

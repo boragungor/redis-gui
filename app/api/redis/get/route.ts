@@ -4,8 +4,10 @@ import { withAuth } from "@/lib/api-auth"
 import { getServerRedisConfig } from "@/lib/server-redis-config"
 import {
   decodeJavaValue,
+  isJavaStringStream,
   looksLikeBase64Java,
   looksLikeJavaSerialized,
+  type JavaShape,
 } from "@/lib/java-value"
 
 export async function POST(request: NextRequest) {
@@ -29,6 +31,9 @@ export async function POST(request: NextRequest) {
         // render the decoded form and mark the value read-only.
         let encoding: "java" | undefined
         let decodeError: string | undefined
+        // "string" values can be re-encoded exactly, so they stay editable;
+        // object graphs cannot be rebuilt and are read-only.
+        let javaShape: JavaShape | undefined
 
         switch (type) {
           case "string": {
@@ -46,6 +51,7 @@ export async function POST(request: NextRequest) {
             if (looksLikeJavaSerialized(raw)) {
               const decoded = await decodeJavaValue(raw)
               encoding = "java"
+              javaShape = isJavaStringStream(raw) ? "string" : "object"
               if (decoded.ok) {
                 value = decoded.value
               } else {
@@ -64,6 +70,8 @@ export async function POST(request: NextRequest) {
               if (decoded.ok) {
                 value = decoded.value
                 encoding = "java"
+                // Base64-wrapped streams are not written back in that form.
+                javaShape = "object"
                 break
               }
               // Not actually Java after all — fall through to the plain string.
@@ -123,6 +131,7 @@ export async function POST(request: NextRequest) {
           size,
           value,
           encoding,
+          javaShape,
           decodeError,
         }
       })

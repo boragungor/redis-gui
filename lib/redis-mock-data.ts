@@ -8,6 +8,11 @@ export interface RedisKey {
   value: unknown
   /** Set to "java" when the stored bytes were Java-serialized and decoded for display. */
   encoding?: "java"
+  /**
+   * For Java values: "string" can be re-encoded exactly and stays editable,
+   * "object" is a class graph we cannot rebuild, so it is read-only.
+   */
+  javaShape?: "string" | "object"
   /** Populated when a Java-serialized value could not be decoded. */
   decodeError?: string
 }
