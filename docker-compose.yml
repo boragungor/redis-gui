@@ -30,6 +30,9 @@ services:
       - MONGODB_TLS_INSECURE=${MONGODB_TLS_INSECURE:-false}
       # Server-side secrets / Redis target (runtime only, never baked into image)
       - AUTH_JWT_SECRET=${AUTH_JWT_SECRET}
+      # Trusted proxies in front of the app; only then is X-Forwarded-For
+      # used for login rate limiting (0 = ignore the header).
+      - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-0}
       - REDIS_HOST=${REDIS_HOST:-localhost}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_DATABASE=${REDIS_DATABASE:-0}

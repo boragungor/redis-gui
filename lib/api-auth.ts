@@ -21,10 +21,21 @@ interface TokenPayload {
  * Must be set in production; throwing here prevents silently issuing
  * unverifiable tokens.
  */
+const MIN_JWT_SECRET_LENGTH = 32
+
 function getMongoJwtSecret(): Uint8Array {
   const secret = process.env.AUTH_JWT_SECRET
   if (!secret) {
     throw new Error("AUTH_JWT_SECRET is not configured")
+  }
+  // A short secret is brute-forceable offline from a single captured token, and
+  // a forged MongoDB-session JWT would then pass withAuth on every route. Fail
+  // closed rather than sign with a weak key.
+  if (secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `AUTH_JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters ` +
+        `(got ${secret.length}). Generate one with: openssl rand -base64 48`,
+    )
   }
   return new TextEncoder().encode(secret)
 }
