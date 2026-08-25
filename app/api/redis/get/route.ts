@@ -2,6 +2,13 @@ import { type NextRequest, NextResponse } from "next/server"
 import { withRedis } from "@/lib/redis-client"
 import { withAuth } from "@/lib/api-auth"
 import { getServerRedisConfig } from "@/lib/server-redis-config"
+import {
+  decodeJavaValue,
+  isJavaStringStream,
+  looksLikeBase64Java,
+  looksLikeJavaSerialized,
+  type JavaShape,
+} from "@/lib/java-value"
 
 export async function POST(request: NextRequest) {
   return withAuth(request, async () => {
@@ -20,11 +27,59 @@ export async function POST(request: NextRequest) {
         }
 
         let value: unknown = null
+        // Set when the stored bytes were Java-serialized, so the client can
+        // render the decoded form and mark the value read-only.
+        let encoding: "java" | undefined
+        let decodeError: string | undefined
+        // "string" values can be re-encoded exactly, so they stay editable;
+        // object graphs cannot be rebuilt and are read-only.
+        let javaShape: JavaShape | undefined
 
         switch (type) {
-          case "string":
-            value = await client.get(key)
+          case "string": {
+            // Read raw bytes, not a UTF-8 string: Java-serialized values are
+            // binary and client.get() would decode them lossily (invalid
+            // sequences become U+FFFD), destroying the data before we can
+            // parse it. For plain values this is byte-identical to get().
+            const raw = await client.getBuffer(key)
+
+            if (raw === null) {
+              value = null
+              break
+            }
+
+            if (looksLikeJavaSerialized(raw)) {
+              const decoded = await decodeJavaValue(raw)
+              encoding = "java"
+              javaShape = isJavaStringStream(raw) ? "string" : "object"
+              if (decoded.ok) {
+                value = decoded.value
+              } else {
+                // Surface the failure in the viewer instead of raw binary.
+                value = null
+                decodeError = decoded.error
+              }
+              break
+            }
+
+            const text = raw.toString("utf8")
+
+            // Some producers store the Java stream base64-encoded.
+            if (looksLikeBase64Java(text)) {
+              const decoded = await decodeJavaValue(Buffer.from(text, "base64"))
+              if (decoded.ok) {
+                value = decoded.value
+                encoding = "java"
+                // Base64-wrapped streams are not written back in that form.
+                javaShape = "object"
+                break
+              }
+              // Not actually Java after all — fall through to the plain string.
+            }
+
+            value = text
             break
+          }
           case "hash":
             value = await client.hgetall(key)
             break
@@ -69,7 +124,16 @@ export async function POST(request: NextRequest) {
             value = null
         }
 
-        return { key, type, ttl: ttl === -1 ? null : ttl, size, value }
+        return {
+          key,
+          type,
+          ttl: ttl === -1 ? null : ttl,
+          size,
+          value,
+          encoding,
+          javaShape,
+          decodeError,
+        }
       })
 
       return NextResponse.json({ success: true, data: result })

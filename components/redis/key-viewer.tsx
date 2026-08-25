@@ -39,13 +39,14 @@ import { JsonViewer } from "@/components/redis/json-viewer"
 
 interface KeyViewerProps {
   keyData: RedisKey | null
-  onUpdateKey: (key: RedisKey) => void
+  onUpdateKey: (key: RedisKey) => void | Promise<{ ok: boolean; error?: string } | void>
   onDeleteKey: (key: string) => void
   onUpdateTTL?: (key: string, action: "set" | "remove", ttl?: number) => void
 }
 
 export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: KeyViewerProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [newTTL, setNewTTL] = useState("")
   const [rawWrap, setRawWrap] = useState(true)
@@ -82,6 +83,11 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
 
   // Helper to recursively parse JSON strings
   const tryParseAndClean = (value: any): { parsed: any; isJson: boolean } => {
+    // Already-structured data (e.g. a decoded Java-serialized value) needs no
+    // parsing — render it with the JSON viewer rather than the raw fallback.
+    if (typeof value === "object" && value !== null) {
+      return { parsed: value, isJson: true }
+    }
     if (typeof value !== "string") return { parsed: value, isJson: false }
 
     // Clean common prefixes (Java serialization, etc)
@@ -119,6 +125,11 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
 
   const colors = typeColors[keyData.type] || defaultTypeColor
 
+  // Only Java *object graphs* are read-only. A Java String value can be
+  // re-encoded byte-for-byte, so it stays editable like any other string.
+  const isJavaReadOnly =
+    keyData.encoding === "java" && keyData.javaShape !== "string"
+
   // Parse value for display (both raw and formatted)
   const { parsed: parsedValue, isJson } = tryParseAndClean(keyData.value)
 
@@ -139,28 +150,60 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
     setIsEditing(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    let newValue: unknown
     try {
-      const newValue =
-        keyData.type === "string" ? editValue : JSON.parse(editValue)
-      onUpdateKey({ ...keyData, value: newValue })
-      setIsEditing(false)
+      newValue = keyData.type === "string" ? editValue : JSON.parse(editValue)
     } catch {
-      // Handle JSON parse error
+      setSaveError("Value is not valid JSON")
+      return
     }
+
+    setSaveError(null)
+    const result = await onUpdateKey({ ...keyData, value: newValue })
+
+    // Keep the editor open when the write was rejected, so the edit isn't lost.
+    if (result && result.ok === false) {
+      setSaveError(result.error || "Failed to save")
+      return
+    }
+    setIsEditing(false)
   }
 
   const renderValue = () => {
     switch (keyData.type) {
       case "string":
+        if (keyData.decodeError) {
+          return (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">
+                Could not decode Java-serialized value
+              </p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground break-all">
+                {keyData.decodeError}
+              </p>
+            </div>
+          )
+        }
         return (
           <div className="space-y-2">
             {isEditing ? (
-              <Textarea
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="min-h-[200px] font-mono text-sm"
-              />
+              <div className="space-y-2">
+                <Textarea
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="min-h-[200px] font-mono text-sm"
+                />
+                {keyData.encoding === "java" && (
+                  <p className="text-xs text-muted-foreground">
+                    This value is stored in Java serialization format. Your edit
+                    is written back in that same format.
+                  </p>
+                )}
+                {saveError && (
+                  <p className="text-xs font-medium text-destructive">{saveError}</p>
+                )}
+              </div>
             ) : (
               <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm overflow-x-auto">
                 {isJson ? (
@@ -314,6 +357,18 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
               >
                 {keyData.type}
               </Badge>
+              {/* Only object graphs get a badge. A Java String value is just
+                  JSON in a thin envelope and stays editable, so flagging it
+                  would tag most keys without telling the user anything. */}
+              {isJavaReadOnly && (
+                <Badge
+                  variant="secondary"
+                  className="border-0 bg-amber-500/10 text-xs font-medium text-amber-600 dark:text-amber-400"
+                  title="Java-serialized object graph, deserialized for display. Read-only: the decoded JSON cannot be turned back into Java class data."
+                >
+                  JAVA DESERIALIZED · READ-ONLY
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground">
                 {formatBytes(keyData.size)}
               </span>
@@ -338,9 +393,13 @@ export function KeyViewer({ keyData, onUpdateKey, onDeleteKey, onUpdateTTL }: Ke
                 <Button variant="ghost" size="icon" onClick={handleCopy}>
                   <Copy className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleEdit}>
-                  <Edit className="h-4 w-4" />
-                </Button>
+                {/* Java object graphs cannot be re-serialized, so they stay
+                    read-only. String-shaped values re-encode exactly. */}
+                {!isJavaReadOnly && (
+                  <Button variant="ghost" size="icon" onClick={handleEdit}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

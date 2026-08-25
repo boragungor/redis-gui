@@ -239,6 +239,9 @@ export default function RedisUI() {
             ttl: data.data.ttl,
             size: data.data.size,
             value: data.data.value,
+            encoding: data.data.encoding,
+            javaShape: data.data.javaShape,
+            decodeError: data.data.decodeError,
           };
           setSelectedKey(fullKey);
           // Also update the key in the list with latest metadata
@@ -294,10 +297,10 @@ export default function RedisUI() {
   // Update a key's value
   const handleUpdateKey = useCallback(
     async (updatedKey: RedisKey) => {
-      if (!connection) return;
+      if (!connection) return { ok: false, error: "Not connected" };
       try {
         const config = buildApiConfig(connection);
-        await authFetch("/api/redis/set", {
+        const response = await authFetch("/api/redis/set", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -306,14 +309,25 @@ export default function RedisUI() {
             type: updatedKey.type,
             value: updatedKey.value,
             ttl: updatedKey.ttl,
+            // Values stored as a Java String are written back in that same
+            // format, so the Java services keep reading them.
+            javaEncode:
+              updatedKey.encoding === "java" &&
+              updatedKey.javaShape === "string",
           }),
         });
+        const data = await response.json();
+        if (!data.success) {
+          // Don't update local state — the stored value did not change.
+          return { ok: false, error: data.error || "Failed to save" };
+        }
         setSelectedKey(updatedKey);
         setKeys((prev) =>
           prev.map((k) => (k.key === updatedKey.key ? updatedKey : k)),
         );
+        return { ok: true };
       } catch {
-        // Error updating
+        return { ok: false, error: "Failed to save" };
       }
     },
     [connection, authFetch],
