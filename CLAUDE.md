@@ -44,6 +44,14 @@ AUTH_JWT_SECRET=
 # behind a single ALB so login rate limiting can identify clients.
 TRUSTED_PROXY_COUNT=0
 
+# Authorization — the two login methods are independent and use unrelated role
+# namespaces. Empty = any authenticated user of that method may use the app.
+#   Azure AD: group/app-role names from the ID token's `roles` claim, e.g.
+#             APP-VF-CaaS-Rewards-NonProd-NamespaceAdmin
+#   MongoDB : AdminUsers.UserRoleID values (UUID strings)
+AUTH_REQUIRED_AZURE_ROLES=
+AUTH_REQUIRED_MONGO_ROLE_IDS=
+
 # Redis connection — server-side only, never sent by the client
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -67,6 +75,7 @@ Redis and MongoDB must be running locally before starting the app.
 - `app/api/auth/mongodb-login` issues the signed JWT via `signMongoToken`; the client stores it in `localStorage` as `mongodb-session`. MongoDB TLS validation is **on by default** — use `MONGODB_TLS_CA_FILE` for a private CA, and `MONGODB_TLS_INSECURE=true` only for local dev (it disables cert/hostname checks and logs a warning).
 - Some Redis values are **Java-serialized** (`java.io.Serializable`), not JSON — e.g. `pegaCache_*` holds an `ArrayList` of `GetNbaResponseDto`. `lib/java-value.ts` detects the stream header (`0xACED0005`) and decodes them to JSON-safe data for display. Two rules: the `get` route must use **`client.getBuffer()`**, never `client.get()` (UTF-8 decoding destroys binary bytes irrecoverably), and writes must preserve the format. Detection is by magic bytes only — never by key name; in practice a JDK-serializing Spring template means *every* value in a database can be Java-encoded. Two shapes are distinguished (`javaShape`): a top-level `java.lang.String` (the common case — services store JSON text through a serializing template) is re-encoded exactly by `encodeJavaString` on save, so it stays editable; a real object graph cannot be rebuilt and is read-only. The `set` route rejects a plain write over Java bytes with a 409 unless `javaEncode` (re-serialize) or `overwriteJava` (deliberate clobber) is passed.
 - Login rate limiting (`lib/login-rate-limit.ts`) enforces a per-username limit **and** a per-IP+username limit. The per-username one is the load-bearing check: `X-Forwarded-For` is client-controlled, so it is only consulted when `TRUSTED_PROXY_COUNT` is set, and never as the sole defence. Do not key rate limiting on the request IP alone.
+- **Authorization** is separate from authentication and the two login methods are gated independently: Azure AD against `AUTH_REQUIRED_AZURE_ROLES` (group names from the token's `roles` claim) and MongoDB against `AUTH_REQUIRED_MONGO_ROLE_IDS` (`AdminUsers.UserRoleID` UUIDs, embedded into the session JWT at login). The namespaces are never cross-compared, and `withAuth` decides which list applies from *which verifier succeeded*, never from a claim in the token. Unauthorized-but-authenticated returns **403**, not 401. An empty list means no restriction for that method and logs a warning once.
 - The CLI `command` route uses an **allowlist** (`lib/redis-command-allowlist.ts`) — only known-safe commands run; `FLUSHALL`, `KEYS`, `EVAL`, `CONFIG SET`, `ACL`, etc. are rejected (`CONFIG GET` is the one permitted exception). Add new commands to the allowlist, never switch back to a denylist.
 
 ## Architecture

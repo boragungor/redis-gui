@@ -33,6 +33,9 @@ services:
       # Trusted proxies in front of the app; only then is X-Forwarded-For
       # used for login rate limiting (0 = ignore the header).
       - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-0}
+      # Authorization: empty = any authenticated user of that login method.
+      - AUTH_REQUIRED_AZURE_ROLES=${AUTH_REQUIRED_AZURE_ROLES:-}
+      - AUTH_REQUIRED_MONGO_ROLE_IDS=${AUTH_REQUIRED_MONGO_ROLE_IDS:-}
       - REDIS_HOST=${REDIS_HOST:-localhost}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_DATABASE=${REDIS_DATABASE:-0}

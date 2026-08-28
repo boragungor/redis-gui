@@ -67,6 +67,9 @@ export default function RedisUI() {
   const [showCLI, setShowCLI] = useState(false);
   const [stats, setStats] = useState<RedisStats>(defaultStats);
   const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  // Set when the API rejects us as authenticated-but-not-permitted (403), so
+  // that lack of access is visible instead of looking like an empty database.
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [showStats, setShowStats] = useState(true);
   const [isAutoRefresh, setIsAutoRefresh] = useState(false);
@@ -140,8 +143,14 @@ export default function RedisUI() {
           console.log("Keys API response:", data);
           if (!data.success) {
             console.error("Keys fetch failed:", data);
+            if (response.status === 403) {
+              setAccessError(
+                data.error || "Your account is not authorized to use this application.",
+              );
+            }
             break;
           }
+          setAccessError(null);
 
           allKeys = [...allKeys, ...data.keys];
           cursor = data.cursor;
@@ -495,6 +504,12 @@ export default function RedisUI() {
         connection={connection}
       />
       <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6 gap-4">
+        {accessError && (
+          <div className="flex-shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <p className="text-sm font-medium text-destructive">Access denied</p>
+            <p className="mt-1 text-sm text-muted-foreground">{accessError}</p>
+          </div>
+        )}
         {/* System Status - Top Level */}
         <section className="flex-shrink-0">
           <div

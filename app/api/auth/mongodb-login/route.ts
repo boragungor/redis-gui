@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MongoClient, type MongoClientOptions } from "mongodb";
 import crypto from "crypto";
-import { signMongoToken } from "@/lib/api-auth";
+import { signMongoToken, isAuthorized } from "@/lib/api-auth";
 import {
   checkLoginRateLimit,
   recordLoginFailure,
@@ -185,8 +185,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Successful auth — clear the failure counter for this key.
+    // Credentials are correct — clear the failure counters.
     clearLoginRateLimit(clientIp, username);
+
+    // Authorization is separate from authentication: a valid user may still not
+    // be permitted to use this tool. Check it here so the person is told at
+    // login rather than seeing every later request fail.
+    const roles = (user.UserRoleID || []).map(String);
+    if (!isAuthorized("mongodb", { oid: String(user.AdminUserID), roles })) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your account is not authorized to use this application.",
+        },
+        { status: 403 },
+      );
+    }
 
     // Issue a signed JWT (valid 15 minutes) the server can verify on each
     // request. Replaces the previous opaque random token.
@@ -195,6 +209,8 @@ export async function POST(request: NextRequest) {
       username: user.Username,
       name: `${user.Firstname || ""} ${user.Lastname || ""}`.trim() || user.Username,
       email: user.EmailAddress,
+      // Carried in the token so later requests need no AdminUsers lookup.
+      roles,
       expiresInSeconds: SESSION_TTL_SECONDS,
     });
     const sessionExpiry = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
