@@ -10,9 +10,7 @@ import { StatsCards } from "@/components/redis/stats-cards";
 import { KeyList } from "@/components/redis/key-list";
 import { KeyViewer } from "@/components/redis/key-viewer";
 import { AddKeyDialog } from "@/components/redis/add-key-dialog";
-import { CLITerminal } from "@/components/redis/cli-terminal";
 import type { ConnectionConfig } from "@/components/redis/connection-screen";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { RedisKey, RedisStats } from "@/lib/redis-mock-data";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -64,9 +62,11 @@ export default function RedisUI() {
   const [keys, setKeys] = useState<RedisKey[]>([]);
   const [selectedKey, setSelectedKey] = useState<RedisKey | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showCLI, setShowCLI] = useState(false);
   const [stats, setStats] = useState<RedisStats>(defaultStats);
   const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  // Set when the API rejects us as authenticated-but-not-permitted (403), so
+  // that lack of access is visible instead of looking like an empty database.
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [showStats, setShowStats] = useState(true);
   const [isAutoRefresh, setIsAutoRefresh] = useState(false);
@@ -140,8 +140,14 @@ export default function RedisUI() {
           console.log("Keys API response:", data);
           if (!data.success) {
             console.error("Keys fetch failed:", data);
+            if (response.status === 403) {
+              setAccessError(
+                data.error || "Your account is not authorized to use this application.",
+              );
+            }
             break;
           }
+          setAccessError(null);
 
           allKeys = [...allKeys, ...data.keys];
           cursor = data.cursor;
@@ -384,51 +390,6 @@ export default function RedisUI() {
     [connection, selectedKey, fetchStats, authFetch],
   );
 
-  // CLI command execution
-  const handleCLICommand = useCallback(
-    async (command: string): Promise<string> => {
-      if (!connection) return "(error) Not connected";
-      try {
-        const config = buildApiConfig(connection);
-        const response = await authFetch("/api/redis/command", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config, command }),
-        });
-        const data = await response.json();
-
-        // After certain commands, refresh keys and stats
-        const cmd = command.trim().split(/\s+/)[0]?.toUpperCase();
-        if (
-          [
-            "SET",
-            "DEL",
-            "FLUSHDB",
-            "FLUSHALL",
-            "RENAME",
-            "EXPIRE",
-            "PERSIST",
-            "HSET",
-            "LPUSH",
-            "RPUSH",
-            "SADD",
-            "ZADD",
-            "XADD",
-            "MSET",
-          ].includes(cmd || "")
-        ) {
-          fetchKeys(connection);
-          fetchStats(connection);
-        }
-
-        return data.result || "";
-      } catch (err) {
-        return `(error) ${err instanceof Error ? err.message : "Command failed"}`;
-      }
-    },
-    [connection, fetchKeys, fetchStats, authFetch],
-  );
-
   // Refresh all data
   const handleRefresh = useCallback(() => {
     if (connection) {
@@ -490,11 +451,15 @@ export default function RedisUI() {
       <Header
         theme={theme}
         onToggleTheme={toggleTheme}
-        onToggleCLI={() => setShowCLI(!showCLI)}
-        showCLI={showCLI}
         connection={connection}
       />
       <main className="flex flex-1 flex-col overflow-hidden p-4 lg:p-6 gap-4">
+        {accessError && (
+          <div className="flex-shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <p className="text-sm font-medium text-destructive">Access denied</p>
+            <p className="mt-1 text-sm text-muted-foreground">{accessError}</p>
+          </div>
+        )}
         {/* System Status - Top Level */}
         <section className="flex-shrink-0">
           <div
@@ -517,7 +482,7 @@ export default function RedisUI() {
           )}
         </section>
 
-        {/* Main Content Area - 3 Columns */}
+        {/* Main Content Area - Key List + Viewer */}
         <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
           {/* Data Explorer Section (Keys + Viewer) */}
           <section className="flex flex-1 flex-col min-w-0 space-y-4">
@@ -553,29 +518,6 @@ export default function RedisUI() {
               </div>
             </div>
           </section>
-
-          {/* Column 3: CLI Terminal */}
-          {showCLI && (
-            <div className="w-96 flex-shrink-0 flex flex-col border-l pl-6 pt-[44px]">
-              <div className="flex flex-col h-full space-y-4">
-                <div className="flex items-center justify-between flex-shrink-0 h-[28px]">
-                  {" "}
-                  {/* Align with Data Explorer header roughly? No, title is in section above. */}
-                  <h2 className="text-lg font-semibold tracking-tight">CLI</h2>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowCLI(false)}
-                  >
-                    <ChevronDown className="h-4 w-4 rotate-90" />
-                  </Button>
-                </div>
-                <div className="flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
-                  <CLITerminal onCommand={handleCLICommand} />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </main>
 

@@ -28,6 +28,27 @@ const MAX_DECODE_BYTES = 8 * 1024 * 1024
 /** Guard against pathological nesting while walking the object graph. */
 const MAX_DEPTH = 64
 
+/**
+ * Cap on how many values the walker may emit.
+ *
+ * A Java stream refers to earlier objects by handle, so a tiny stream can
+ * describe a graph where one node is reachable by many distinct paths. Walking
+ * every path expands the output exponentially — ~23 input nodes can produce
+ * ~88M characters — and the input size limit does not help because the input
+ * really is that small. The budget bounds the *output* regardless of shape.
+ *
+ * The largest real value observed in practice emits ~7k nodes, so this leaves
+ * roughly two orders of magnitude of headroom.
+ */
+const MAX_EMITTED_NODES = 500_000
+
+const TRUNCATION_MARKER = "[Truncated: value too large to display]"
+
+/** Mutable emit budget shared across one walk. */
+interface Budget {
+  remaining: number
+}
+
 export type JavaDecodeResult =
   | { ok: true; value: unknown }
   | { ok: false; error: string }
@@ -206,10 +227,20 @@ function normalizeLong(value: {
  * circular references (Java streams use back-references freely).
  */
 export function normalizeJavaObject(input: unknown): unknown {
-  return walk(input, new WeakSet<object>(), 0)
+  return walk(input, new WeakSet<object>(), 0, { remaining: MAX_EMITTED_NODES })
 }
 
-function walk(value: unknown, seen: WeakSet<object>, depth: number): unknown {
+function walk(
+  value: unknown,
+  seen: WeakSet<object>,
+  depth: number,
+  budget: Budget,
+): unknown {
+  // Stop expanding once the budget is spent, so a heavily shared graph cannot
+  // blow up the response.
+  if (budget.remaining <= 0) return TRUNCATION_MARKER
+  budget.remaining--
+
   if (value === null || value === undefined) return null
 
   const primitive = typeof value
@@ -251,17 +282,17 @@ function walk(value: unknown, seen: WeakSet<object>, depth: number): unknown {
     if (value instanceof Map) {
       const result: Record<string, unknown> = {}
       for (const [mapKey, mapValue] of value) {
-        result[String(walk(mapKey, seen, depth + 1))] = walk(mapValue, seen, depth + 1)
+        result[String(walk(mapKey, seen, depth + 1, budget))] = walk(mapValue, seen, depth + 1, budget)
       }
       return result
     }
 
     if (value instanceof Set) {
-      return Array.from(value, (item) => walk(item, seen, depth + 1))
+      return Array.from(value, (item) => walk(item, seen, depth + 1, budget))
     }
 
     if (Array.isArray(value)) {
-      return value.map((item) => walk(item, seen, depth + 1))
+      return value.map((item) => walk(item, seen, depth + 1, budget))
     }
 
     const javaObject = value as JavaObjectLike
@@ -269,22 +300,22 @@ function walk(value: unknown, seen: WeakSet<object>, depth: number): unknown {
 
     // Integer/Long/... serialize as { value: N }; surface the number itself.
     if (className && BOXED_PRIMITIVES.has(className) && "value" in javaObject) {
-      return walk(javaObject.value, seen, depth + 1)
+      return walk(javaObject.value, seen, depth + 1, budget)
     }
 
     // ArrayList/ArrayDeque hold their elements in `list`; `{list:[...]}` is noise.
     if (className && LIST_CLASSES.has(className) && Array.isArray(javaObject.list)) {
-      return javaObject.list.map((item) => walk(item, seen, depth + 1))
+      return javaObject.list.map((item) => walk(item, seen, depth + 1, budget))
     }
 
     // HashMap/Hashtable/EnumMap expose an ES Map in `map`.
     if (javaObject.map instanceof Map) {
-      return walk(javaObject.map, seen, depth + 1)
+      return walk(javaObject.map, seen, depth + 1, budget)
     }
 
     // HashSet exposes an ES Set in `set`.
     if (javaObject.set instanceof Set) {
-      return walk(javaObject.set, seen, depth + 1)
+      return walk(javaObject.set, seen, depth + 1, budget)
     }
 
     // Plain DTO: copy its declared fields. `class`/`extends` are
@@ -293,7 +324,7 @@ function walk(value: unknown, seen: WeakSet<object>, depth: number): unknown {
     const result: Record<string, unknown> = {}
     for (const [fieldName, fieldValue] of Object.entries(javaObject)) {
       if (fieldName === "@") continue
-      const normalized = walk(fieldValue, seen, depth + 1)
+      const normalized = walk(fieldValue, seen, depth + 1, budget)
       if (normalized !== undefined) result[fieldName] = normalized
     }
     return result

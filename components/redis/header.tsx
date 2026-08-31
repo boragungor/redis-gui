@@ -16,7 +16,6 @@ import {
   Settings,
   Moon,
   Sun,
-  Terminal,
   Download,
   Upload,
   Info,
@@ -33,16 +32,12 @@ import type { ConnectionConfig } from "@/components/redis/connection-screen";
 interface HeaderProps {
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  onToggleCLI: () => void;
-  showCLI: boolean;
   connection?: ConnectionConfig;
 }
 
 export function Header({
   theme,
   onToggleTheme,
-  onToggleCLI,
-  showCLI,
   connection,
 }: HeaderProps) {
   const { user, logout, isAuthenticated } = useAuth();
@@ -98,14 +93,6 @@ export function Header({
         {/* Session Countdown (Any Auth) */}
         {isAuthenticationRequired() && isAuthenticated && <SessionCountdown />}
 
-        <Button
-          variant={showCLI ? "secondary" : "ghost"}
-          size="icon"
-          onClick={onToggleCLI}
-          title="Toggle CLI"
-        >
-          <Terminal className="h-4 w-4" />
-        </Button>
         <Button variant="ghost" size="icon" onClick={onToggleTheme}>
           {theme === "dark" ? (
             <Sun className="h-4 w-4" />

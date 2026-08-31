@@ -55,7 +55,7 @@ pnpm dev
 Visit `http://localhost:3000`:
 1. **Azure AD Login** - Sign in with your Microsoft account (same window redirect)
 2. **Auto-connect** - App automatically connects to Redis at `localhost:6379`
-3. **Manage Redis** - View keys, execute commands, etc.
+3. **Manage Redis** - Browse, view and edit keys
 4. **Logout** - Click your avatar in the header → "Sign out"
 
 **Note**: Make sure Redis is running at `localhost:6379` before starting the app.

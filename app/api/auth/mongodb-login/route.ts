@@ -6,18 +6,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MongoClient, type MongoClientOptions } from "mongodb";
 import crypto from "crypto";
-import { signMongoToken } from "@/lib/api-auth";
+import { signMongoToken, isAuthorized } from "@/lib/api-auth";
 import {
-  rateLimitKey,
-  checkRateLimit,
-  recordFailure,
-  clearRateLimit,
+  checkLoginRateLimit,
+  recordLoginFailure,
+  clearLoginRateLimit,
 } from "@/lib/login-rate-limit";
 
+/** Placeholder used when the client address cannot be established safely. */
+const UNATTRIBUTED_IP = "unattributed";
+
+/**
+ * Resolve the client address for rate limiting.
+ *
+ * X-Forwarded-For is set by the client unless something in front of the app
+ * overwrites it, so trusting it blindly lets an attacker land every request in
+ * a fresh bucket and defeat rate limiting entirely. It is therefore only read
+ * when TRUSTED_PROXY_COUNT says how many proxies sit in front of us: with N
+ * trusted hops the client address is the Nth entry from the right of the chain.
+ *
+ * With no trusted proxy configured (the default) the header is ignored and all
+ * requests share a placeholder address — the per-username limit still applies,
+ * so brute force stays bounded.
+ */
 function getClientIp(request: NextRequest): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return request.headers.get("x-real-ip") || "unknown";
+  const trustedProxies = Number.parseInt(
+    process.env.TRUSTED_PROXY_COUNT || "0",
+    10,
+  );
+  if (!Number.isFinite(trustedProxies) || trustedProxies <= 0) {
+    return UNATTRIBUTED_IP;
+  }
+
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (!forwarded) return UNATTRIBUTED_IP;
+
+  const chain = forwarded
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const index = chain.length - trustedProxies;
+  return index >= 0 && chain[index] ? chain[index] : UNATTRIBUTED_IP;
 }
 
 interface LoginRequest {
@@ -63,9 +93,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limit brute-force attempts (keyed by client IP + username).
-    const rlKey = rateLimitKey(getClientIp(request), username);
-    const rl = checkRateLimit(rlKey);
+    // Rate limit brute-force attempts. The per-username limit applies even when
+    // the client address cannot be trusted, so this cannot be spoofed away.
+    const clientIp = getClientIp(request);
+    const rl = checkLoginRateLimit(clientIp, username);
     if (rl.limited) {
       return NextResponse.json(
         {
@@ -128,7 +159,7 @@ export async function POST(request: NextRequest) {
     const user = await collection.findOne({ Username: username });
 
     if (!user) {
-      recordFailure(rlKey);
+      recordLoginFailure(clientIp, username);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
@@ -137,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user is active (Status = 1)
     if (user.Status !== 1) {
-      recordFailure(rlKey);
+      recordLoginFailure(clientIp, username);
       return NextResponse.json(
         { success: false, error: "User account is inactive" },
         { status: 401 },
@@ -147,15 +178,29 @@ export async function POST(request: NextRequest) {
     // Hash input password and compare with stored hash
     const hashedPassword = hashPassword(password);
     if (hashedPassword !== user.UserPassword) {
-      recordFailure(rlKey);
+      recordLoginFailure(clientIp, username);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 },
       );
     }
 
-    // Successful auth — clear the failure counter for this key.
-    clearRateLimit(rlKey);
+    // Credentials are correct — clear the failure counters.
+    clearLoginRateLimit(clientIp, username);
+
+    // Authorization is separate from authentication: a valid user may still not
+    // be permitted to use this tool. Check it here so the person is told at
+    // login rather than seeing every later request fail.
+    const roles = (user.UserRoleID || []).map(String);
+    if (!isAuthorized("mongodb", { oid: String(user.AdminUserID), roles })) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your account is not authorized to use this application.",
+        },
+        { status: 403 },
+      );
+    }
 
     // Issue a signed JWT (valid 15 minutes) the server can verify on each
     // request. Replaces the previous opaque random token.
@@ -164,6 +209,8 @@ export async function POST(request: NextRequest) {
       username: user.Username,
       name: `${user.Firstname || ""} ${user.Lastname || ""}`.trim() || user.Username,
       email: user.EmailAddress,
+      // Carried in the token so later requests need no AdminUsers lookup.
+      roles,
       expiresInSeconds: SESSION_TTL_SECONDS,
     });
     const sessionExpiry = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);

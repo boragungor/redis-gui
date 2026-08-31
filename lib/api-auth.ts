@@ -11,20 +11,43 @@ interface TokenPayload {
   name?: string
   preferred_username?: string
   email?: string
+  /**
+   * For Azure tokens: the app-role / group names Azure put in the token.
+   * For MongoDB tokens: the AdminUsers.UserRoleID values we embedded at login.
+   * The two namespaces are unrelated and are never compared against each other.
+   */
   roles?: string[]
   groups?: string[]
   authType?: "azure" | "mongodb"
 }
 
 /**
+ * Which verifier accepted the token. Derived from the verification that
+ * succeeded, never from a claim inside the token, so it cannot be influenced by
+ * whoever minted it.
+ */
+export type AuthSource = "azure" | "mongodb"
+
+/**
  * Secret used to sign and verify MongoDB session JWTs.
  * Must be set in production; throwing here prevents silently issuing
  * unverifiable tokens.
  */
+const MIN_JWT_SECRET_LENGTH = 32
+
 function getMongoJwtSecret(): Uint8Array {
   const secret = process.env.AUTH_JWT_SECRET
   if (!secret) {
     throw new Error("AUTH_JWT_SECRET is not configured")
+  }
+  // A short secret is brute-forceable offline from a single captured token, and
+  // a forged MongoDB-session JWT would then pass withAuth on every route. Fail
+  // closed rather than sign with a weak key.
+  if (secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `AUTH_JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters ` +
+        `(got ${secret.length}). Generate one with: openssl rand -base64 48`,
+    )
   }
   return new TextEncoder().encode(secret)
 }
@@ -38,6 +61,8 @@ export async function signMongoToken(payload: {
   username: string
   name?: string
   email?: string
+  /** AdminUsers.UserRoleID — carried so authorization needs no per-request DB hit. */
+  roles?: string[]
   expiresInSeconds: number
 }): Promise<string> {
   return new SignJWT({
@@ -45,6 +70,7 @@ export async function signMongoToken(payload: {
     name: payload.name,
     email: payload.email,
     preferred_username: payload.username,
+    roles: payload.roles ?? [],
     authType: "mongodb",
   })
     .setProtectedHeader({ alg: "HS256" })
@@ -134,6 +160,61 @@ export function hasRole(payload: TokenPayload, role: string): boolean {
 }
 
 /**
+ * Authorization.
+ *
+ * The two login methods are independent and carry unrelated role namespaces:
+ *   - Azure AD  -> AUTH_REQUIRED_AZURE_ROLES     (group names, e.g. APP-VF-...)
+ *   - MongoDB   -> AUTH_REQUIRED_MONGO_ROLE_IDS  (AdminUsers.UserRoleID UUIDs)
+ *
+ * They are checked separately and never cross-compared: a value in one
+ * namespace can never satisfy a requirement in the other.
+ *
+ * An empty list means "any authenticated user of that method", which preserves
+ * the behaviour from before authorization existed. That is deliberately
+ * permissive, so it is announced once per process rather than failing silently.
+ */
+function parseRoleList(raw: string | undefined): string[] {
+  return (raw || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
+const announcedOpenAccess = new Set<AuthSource>()
+
+function announceOpenAccessOnce(source: AuthSource, envVar: string) {
+  if (announcedOpenAccess.has(source)) return
+  announcedOpenAccess.add(source)
+  console.warn(
+    `[authz] ${envVar} is not set — every successfully authenticated ${source} ` +
+      `user may use this application. Set ${envVar} to restrict access.`,
+  )
+}
+
+/** Whether this verified user satisfies the requirement for their login method. */
+export function isAuthorized(source: AuthSource, payload: TokenPayload): boolean {
+  if (source === "mongodb") {
+    const required = parseRoleList(process.env.AUTH_REQUIRED_MONGO_ROLE_IDS)
+    if (required.length === 0) {
+      announceOpenAccessOnce(source, "AUTH_REQUIRED_MONGO_ROLE_IDS")
+      return true
+    }
+    // Only `roles`, which we populated from UserRoleID in a token we signed.
+    const held = payload.roles ?? []
+    return held.some((role) => required.includes(role))
+  }
+
+  const required = parseRoleList(process.env.AUTH_REQUIRED_AZURE_ROLES)
+  if (required.length === 0) {
+    announceOpenAccessOnce(source, "AUTH_REQUIRED_AZURE_ROLES")
+    return true
+  }
+  // Azure may deliver app roles as `roles` or group names as `groups`.
+  const held = [...(payload.roles ?? []), ...(payload.groups ?? [])]
+  return held.some((role) => required.includes(role))
+}
+
+/**
  * Middleware helper for protected API routes
  * Usage in API route:
  * 
@@ -161,13 +242,33 @@ export async function withAuth(
     )
   }
 
-  // Accept either an Azure AD token or a MongoDB-session JWT.
-  const user = (await verifyMongoToken(token)) ?? (await verifyAzureToken(token))
+  // Accept either a MongoDB-session JWT or an Azure AD token. The source is
+  // taken from whichever verifier succeeded — never from a claim in the token —
+  // so the role namespace applied cannot be chosen by the token's issuer.
+  let user = await verifyMongoToken(token)
+  let source: AuthSource | null = user ? "mongodb" : null
 
   if (!user) {
+    user = await verifyAzureToken(token)
+    source = user ? "azure" : null
+  }
+
+  if (!user || !source) {
     return new Response(
       JSON.stringify({ success: false, error: "Invalid or expired token" }),
       { status: 401, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
+  // Authenticated but not permitted: 403, so the client does not treat this as
+  // a bad token and retry the login loop.
+  if (!isAuthorized(source, user)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Your account is not authorized to use this application.",
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
     )
   }
 
