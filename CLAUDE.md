@@ -76,7 +76,6 @@ Redis and MongoDB must be running locally before starting the app.
 - Some Redis values are **Java-serialized** (`java.io.Serializable`), not JSON — e.g. `pegaCache_*` holds an `ArrayList` of `GetNbaResponseDto`. `lib/java-value.ts` detects the stream header (`0xACED0005`) and decodes them to JSON-safe data for display. Two rules: the `get` route must use **`client.getBuffer()`**, never `client.get()` (UTF-8 decoding destroys binary bytes irrecoverably), and writes must preserve the format. Detection is by magic bytes only — never by key name; in practice a JDK-serializing Spring template means *every* value in a database can be Java-encoded. Two shapes are distinguished (`javaShape`): a top-level `java.lang.String` (the common case — services store JSON text through a serializing template) is re-encoded exactly by `encodeJavaString` on save, so it stays editable; a real object graph cannot be rebuilt and is read-only. The `set` route rejects a plain write over Java bytes with a 409 unless `javaEncode` (re-serialize) or `overwriteJava` (deliberate clobber) is passed.
 - Login rate limiting (`lib/login-rate-limit.ts`) enforces a per-username limit **and** a per-IP+username limit. The per-username one is the load-bearing check: `X-Forwarded-For` is client-controlled, so it is only consulted when `TRUSTED_PROXY_COUNT` is set, and never as the sole defence. Do not key rate limiting on the request IP alone.
 - **Authorization** is separate from authentication and the two login methods are gated independently: Azure AD against `AUTH_REQUIRED_AZURE_ROLES` (group names from the token's `roles` claim) and MongoDB against `AUTH_REQUIRED_MONGO_ROLE_IDS` (`AdminUsers.UserRoleID` UUIDs, embedded into the session JWT at login). The namespaces are never cross-compared, and `withAuth` decides which list applies from *which verifier succeeded*, never from a claim in the token. Unauthorized-but-authenticated returns **403**, not 401. An empty list means no restriction for that method and logs a warning once.
-- The CLI `command` route uses an **allowlist** (`lib/redis-command-allowlist.ts`) — only known-safe commands run; `FLUSHALL`, `KEYS`, `EVAL`, `CONFIG SET`, `ACL`, etc. are rejected (`CONFIG GET` is the one permitted exception). Add new commands to the allowlist, never switch back to a denylist.
 
 ## Architecture
 
@@ -109,7 +108,6 @@ All routes follow the same pattern: receive `{ config: RedisConnectionConfig, ..
 - `redis/set` — create/update key (string, hash, list, set, zset)
 - `redis/delete` — delete one or more keys
 - `redis/ttl` — set or remove TTL
-- `redis/command` — execute arbitrary Redis command string
 - `redis/info` — parse `INFO` output into stats object
 - `redis/connect` — test connectivity
 - `auth/mongodb-login` — POST `{ username, password }`, queries `AdminUsers` collection, hashes password with SHA1 (uppercase hex), returns session token valid for 15 minutes
@@ -117,6 +115,6 @@ All routes follow the same pattern: receive `{ config: RedisConnectionConfig, ..
 
 ### UI layout (`app/page.tsx`)
 
-Single-page layout with three columns: **Key List** (left, fixed 384px) → **Key Viewer** (center, flex) → **CLI Terminal** (right, togglable). Stats panel collapses. All state lives in the root `RedisUI` component; child components receive callbacks.
+Single-page layout with two columns: **Key List** (left, fixed 384px) → **Key Viewer** (right, flex). Stats panel collapses. All state lives in the root `RedisUI` component; child components receive callbacks.
 
 Components are in `components/redis/` (domain components) and `components/ui/` (shadcn/ui primitives — treat as library code, avoid modifying).
